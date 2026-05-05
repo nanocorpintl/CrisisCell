@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CrisisCell — CMA Ships</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">CC</div>
+      <div class="brand-text">
+        <div class="brand-title">CrisisCell</div>
+        <div class="brand-sub">CMA Ships — Cellule de Crise Maritime</div>
+      </div>
+    </div>
+    <div class="status-strip">
+      <div class="alert-level" id="alertLevel">
+        <span class="alert-dot"></span>
+        <select id="alertSelect" aria-label="Niveau d'alerte">
+          <option value="green">VERT — Veille normale</option>
+          <option value="yellow">JAUNE — Vigilance renforcée</option>
+          <option value="orange">ORANGE — Pré-alerte cellule</option>
+          <option value="red">ROUGE — Cellule de crise activée</option>
+          <option value="black">NOIR — Crise majeure / continuité</option>
+        </select>
+      </div>
+      <div class="utc-clock">
+        <span class="lbl">UTC</span>
+        <span id="utcClock">--:--:--</span>
+      </div>
+      <div class="local-clock">
+        <span class="lbl">LOCAL</span>
+        <span id="localClock">--:--:--</span>
+      </div>
+      <div class="ops-period">
+        <span class="lbl">OPS PERIOD</span>
+        <input id="opsPeriod" placeholder="ex. 24H06-24H18" />
+      </div>
+      <button class="btn-ghost" id="exportData" title="Export JSON">⬇ Export</button>
+      <button class="btn-ghost" id="importData" title="Import JSON">⬆ Import</button>
+      <input type="file" id="importFile" accept=".json" hidden />
+      <button class="btn-danger" id="resetAll" title="Réinitialiser">⟲ Reset</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="cop">COP</button>
+    <button class="tab" data-tab="incidents">Incidents</button>
+    <button class="tab" data-tab="vessels">Navires</button>
+    <button class="tab" data-tab="mel">Main Events Log</button>
+    <button class="tab" data-tab="team">Cellule</button>
+    <button class="tab" data-tab="actions">Actions</button>
+    <button class="tab" data-tab="decisions">Décisions (OODA)</button>
+    <button class="tab" data-tab="comms">Comms</button>
+    <button class="tab" data-tab="stakeholders">Parties prenantes</button>
+    <button class="tab" data-tab="risk">Matrice de risque</button>
+    <button class="tab" data-tab="rhythm">Battle rhythm</button>
+    <button class="tab" data-tab="sitrep">SITREP</button>
+    <button class="tab" data-tab="playbooks">Playbooks</button>
+    <button class="tab" data-tab="ccir">CCIR</button>
+  </nav>
+
+  <main id="main"></main>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Titre</h3>
+        <button class="btn-ghost" id="modalClose">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span>CrisisCell · Inspiré ICS · OODA · NATO SITREP · IMO A.1072(28) · BMP5 · ISM Code</span>
+    <span id="storageStatus">Stockage local — toutes données restent dans ce navigateur.</span>
+  </footer>
+
+  <script src="data/playbooks.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
