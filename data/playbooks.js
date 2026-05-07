@@ -273,6 +273,114 @@ window.CCIR_TEMPLATE = [
   { type: 'EEFI', label: 'Information NE PAS divulguer (positions sensibles, négociations)', items: [] }
 ];
 
+// OPORD template — format militaire NATO 5 paragraphes
+window.OPORD_TEMPLATE = `=================== OPORD — CMA SHIPS ===================
+DTG          : {DTG}
+OPORD N°     : {NUM}
+ÉMETTEUR     : {ISSUER}
+DESTINATAIRE : {DEST}
+CLASSIFICATION : {CLASSIF}
+RÉFÉRENCE    : {REF}
+
+1. SITUATION
+   a) Contexte / menace
+{SIT_CONTEXT}
+   b) Forces amies / ressources
+{SIT_FRIENDLY}
+   c) Hypothèses
+{SIT_ASSUMPTIONS}
+
+2. MISSION
+   QUI fait QUOI, QUAND, OÙ, et POURQUOI (intention)
+{MISSION}
+
+3. EXÉCUTION
+   a) Intention du Crisis Manager
+{INTENT}
+   b) Concept d'opération (manœuvre + appui)
+{CONCEPT}
+   c) End-state (situation finale recherchée)
+{END_STATE}
+   d) No-go criteria (critères d'arrêt)
+{NOGO}
+   e) Tâches par cellule
+{TASKS}
+   f) Coordination (timing, points de contrôle)
+{COORDINATION}
+
+4. SOUTIEN / LOGISTIQUE
+   Salvage, P&I, agences, médical, juridique, communication
+{SUPPORT}
+
+5. COMMANDEMENT ET TRANSMISSIONS
+   a) Chaîne de commandement
+{COMMAND_CHAIN}
+   b) Canaux et fréquences
+{COMMS}
+   c) Cadence des SITREP
+{REPORTING}
+
+------------------------------------------------------------
+SIGNATURE : {SIGNATURE}
+=========================================================`;
+
+// Échelle de gravité maritime — adaptée INES (nucléaire) à 8 niveaux
+window.SEVERITY_SCALE = [
+  { level: 0, label: 'Écart',                 desc: 'Aucun impact sécurité ou environnement', color: 'green' },
+  { level: 1, label: 'Anomalie',              desc: 'Anomalie mineure, traitement de routine', color: 'green' },
+  { level: 2, label: 'Incident',              desc: 'Incident sans conséquence majeure', color: 'yellow' },
+  { level: 3, label: 'Incident sérieux',      desc: 'Conséquences locales bord, défense en profondeur dégradée', color: 'yellow' },
+  { level: 4, label: 'Accident sans impact extérieur', desc: 'Dommage navire / cargaison, pas de pollution majeure', color: 'orange' },
+  { level: 5, label: 'Accident à conséquences locales', desc: 'Pollution, victimes, retentissement médiatique', color: 'orange' },
+  { level: 6, label: 'Accident grave',        desc: 'Atteinte structurelle majeure, victimes multiples, pollution étendue', color: 'red' },
+  { level: 7, label: 'Accident majeur',       desc: 'Naufrage, pertes humaines lourdes, crise nationale/internationale', color: 'red' }
+];
+
+// ROE — Rules of Engagement maritimes (BMP5 / use of force continuum)
+window.ROE_LEVELS = [
+  { level: 1, label: 'Vigilance', desc: 'Veille passive, observation, renforcement vigies' },
+  { level: 2, label: 'Mesures passives', desc: 'Routage modifié, augmentation vitesse, citadelles préparées' },
+  { level: 3, label: 'Mesures actives non létales', desc: 'Lances incendie, fil barbelé, signaux dissuasifs, manoeuvres' },
+  { level: 4, label: 'Coordination forces armées', desc: 'Marines, escorte, équipe protection embarquée (PCASP)' },
+  { level: 5, label: 'Légitime défense', desc: 'Recours à la force conformément droit international, validation juridique' }
+];
+
+// Phases de cinétique de crise — REX nucléaire et marine
+window.CRISIS_PHASES = [
+  { code: 'reflex', label: 'RÉFLEXE',
+    desc: 'Action immédiate au plus près de l\'événement. Règle des 3R : Reculer, Rendre compte, Réfléchir. Décisions par procédure et délégation.' },
+  { code: 'concert', label: 'CONCERTÉE',
+    desc: 'Cellule constituée, COP établi, OPORD en cours. Décisions par battle rhythm, RETEX en boucle courte.' },
+  { code: 'post', label: 'POST-CRISE',
+    desc: 'Sortie de crise, retour à la normale, RETEX formel, capitalisation, communication post-incident.' }
+];
+
+// AAR — After-Action Review (US Army FM 6-22, repris ICS)
+window.AAR_QUESTIONS = [
+  { code: 'expected', label: 'Que devait-il se passer ?',
+    hint: 'Plan initial, intention du commandement, mission, end-state attendu' },
+  { code: 'actual', label: 'Que s\'est-il passé ?',
+    hint: 'Faits observés, chronologie réelle, décisions prises, résultats' },
+  { code: 'gap', label: 'Pourquoi y a-t-il une différence ?',
+    hint: 'Causes racines, contraintes, défaillances, surprises, frictions' },
+  { code: 'improve', label: 'Que devons-nous améliorer / pérenniser ?',
+    hint: 'Lessons Identified → Lessons Learned : actions concrètes pour éviter récidive ou répliquer succès' }
+];
+
+// Trame Passation de quart — naval watch handover, complétée NRC ICS Form 201
+window.HANDOVER_CHECKLIST = [
+  'Niveau d\'alerte courant et incidents actifs',
+  'Position et état de chaque navire impacté',
+  'Décisions prises pendant le quart, en attente de validation',
+  'Actions ouvertes critiques (P1) et leurs échéances',
+  'Communications en cours / réponses attendues',
+  'Engagements externes (autorités, P&I, médias) prévus',
+  'Ressources mobilisées : ETA, statut',
+  'Zones de vigilance / risques émergents',
+  'Décisions sensibles à éviter / no-go criteria',
+  'Documents et coordonnées partagés (canal, lien, classification)'
+];
+
 // Rôles cellule de crise — inspirés ICS + organisation maritime
 window.ROLES = [
   { code: 'CMD', name: 'Crisis Manager / Incident Commander', desc: 'Pilote la cellule, valide décisions stratégiques' },
@@ -288,5 +396,7 @@ window.ROLES = [
   { code: 'SEC', name: 'Security / CSO', desc: 'Company Security Officer, sûreté, ISPS' },
   { code: 'IT',  name: 'Cyber / IT Lead', desc: 'Cellule cyber, comms, outillage SI' },
   { code: 'HR',  name: 'HR / Familles', desc: 'Cellule familles, soutien psy, RH équipage' },
-  { code: 'TEC', name: 'Technical / Superintendent', desc: 'Expertise navire, classification, chantiers' }
+  { code: 'TEC', name: 'Technical / Superintendent', desc: 'Expertise navire, classification, chantiers' },
+  { code: 'ANT', name: 'Cellule Anticipation',     desc: 'Prospective H+6/24/72, scénarios best/likely/worst (REX nucléaire)' },
+  { code: 'WRT', name: 'Watch / Battle Captain rotation', desc: 'Officier de quart 24/7, passation formelle' }
 ];
