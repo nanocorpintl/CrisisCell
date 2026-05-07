@@ -3,83 +3,195 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<!-- Cybersécurité : Content Security Policy stricte, aucun script inline, aucun CDN. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; manifest-src 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="format-detection" content="telephone=no">
+
 <title>CrisisCell — CMA Ships</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-logo">CC</div>
-      <div class="brand-text">
-        <div class="brand-title">CrisisCell</div>
-        <div class="brand-sub">CMA Ships — Cellule de Crise Maritime</div>
-      </div>
-    </div>
-    <div class="status-strip">
-      <div class="alert-level" id="alertLevel">
-        <span class="alert-dot"></span>
-        <select id="alertSelect" aria-label="Niveau d'alerte">
-          <option value="green">VERT — Veille normale</option>
-          <option value="yellow">JAUNE — Vigilance renforcée</option>
-          <option value="orange">ORANGE — Pré-alerte cellule</option>
-          <option value="red">ROUGE — Cellule de crise activée</option>
-          <option value="black">NOIR — Crise majeure / continuité</option>
-        </select>
-      </div>
-      <div class="utc-clock">
-        <span class="lbl">UTC</span>
-        <span id="utcClock">--:--:--</span>
-      </div>
-      <div class="local-clock">
-        <span class="lbl">LOCAL</span>
-        <span id="localClock">--:--:--</span>
-      </div>
-      <div class="ops-period">
-        <span class="lbl">OPS PERIOD</span>
-        <input id="opsPeriod" placeholder="ex. 24H06-24H18" />
-      </div>
-      <button class="btn-ghost" id="exportData" title="Export JSON">⬇ Export</button>
-      <button class="btn-ghost" id="importData" title="Import JSON">⬆ Import</button>
-      <input type="file" id="importFile" accept=".json" hidden />
-      <button class="btn-danger" id="resetAll" title="Réinitialiser">⟲ Reset</button>
-    </div>
-  </header>
+<body class="locked">
 
-  <nav class="tabs" role="tablist">
-    <button class="tab active" data-tab="cop">COP</button>
-    <button class="tab" data-tab="incidents">Incidents</button>
-    <button class="tab" data-tab="vessels">Navires</button>
-    <button class="tab" data-tab="mel">Main Events Log</button>
-    <button class="tab" data-tab="team">Cellule</button>
-    <button class="tab" data-tab="actions">Actions</button>
-    <button class="tab" data-tab="decisions">Décisions (OODA)</button>
-    <button class="tab" data-tab="comms">Comms</button>
-    <button class="tab" data-tab="stakeholders">Parties prenantes</button>
-    <button class="tab" data-tab="risk">Matrice de risque</button>
-    <button class="tab" data-tab="rhythm">Battle rhythm</button>
-    <button class="tab" data-tab="sitrep">SITREP</button>
-    <button class="tab" data-tab="playbooks">Playbooks</button>
-    <button class="tab" data-tab="ccir">CCIR</button>
-  </nav>
-
-  <main id="main"></main>
-
-  <div id="modal" class="modal hidden">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="modalTitle">Titre</h3>
-        <button class="btn-ghost" id="modalClose">✕</button>
-      </div>
-      <div class="modal-body" id="modalBody"></div>
+<!-- ================================================================ -->
+<!--   ÉCRAN DE VERROUILLAGE (initialisation, déverrouillage, lock)   -->
+<!-- ================================================================ -->
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-card">
+    <div class="auth-logo">CC</div>
+    <h2 class="auth-title">CrisisCell</h2>
+    <p class="auth-sub">CMA Ships — Cellule de Crise</p>
+    <div id="authBody"></div>
+    <div class="auth-foot">
+      <span>Chiffrement AES-GCM 256 / PBKDF2 250 000 itérations</span>
     </div>
   </div>
+</div>
 
-  <footer class="footer">
-    <span>CrisisCell · Inspiré ICS · OODA · NATO SITREP · IMO A.1072(28) · BMP5 · ISM Code</span>
-    <span id="storageStatus">Stockage local — toutes données restent dans ce navigateur.</span>
-  </footer>
+<!-- ================================================================ -->
+<!--                          INTERFACE PRINCIPALE                    -->
+<!-- ================================================================ -->
+<div id="appShell" hidden>
 
-  <script src="data/playbooks.js"></script>
-  <script src="app.js"></script>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-logo">CC</div>
+    <div class="brand-text">
+      <div class="brand-title">CrisisCell</div>
+      <div class="brand-sub">CMA Ships — Cellule de Crise Maritime</div>
+    </div>
+  </div>
+  <div class="status-strip">
+    <div class="alert-level" id="alertLevel">
+      <span class="alert-dot"></span>
+      <select id="alertSelect" aria-label="Niveau d'alerte">
+        <option value="green">VERT — Veille normale</option>
+        <option value="yellow">JAUNE — Vigilance renforcée</option>
+        <option value="orange">ORANGE — Pré-alerte cellule</option>
+        <option value="red">ROUGE — Cellule de crise activée</option>
+        <option value="black">NOIR — Crise majeure / continuité</option>
+      </select>
+    </div>
+    <div class="utc-clock"><span class="lbl">UTC</span><span id="utcClock">--:--:--</span></div>
+    <div class="local-clock"><span class="lbl">LOCAL</span><span id="localClock">--:--:--</span></div>
+    <div class="ops-period"><span class="lbl">OPS PERIOD</span><input id="opsPeriod" placeholder="ex. 24H06-24H18" autocomplete="off" /></div>
+    <div class="user-chip" id="userChip" title="Utilisateur connecté"></div>
+    <button class="btn-ghost" id="helpBtn" title="Raccourcis (?)">?</button>
+    <button class="btn-ghost" id="exportData" title="Export JSON déchiffré">⬇</button>
+    <button class="btn-ghost" id="importData" title="Import">⬆</button>
+    <input type="file" id="importFile" accept=".json" hidden />
+    <button class="btn-ghost" id="changePwdBtn" title="Changer de mot de passe">🔑</button>
+    <button class="btn-warn" id="lockBtn" title="Verrouiller (Ctrl+L)">🔒</button>
+    <button class="btn-danger" id="resetAll" title="Réinitialiser (efface tout)">⟲</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-tab="cop">COP</button>
+  <button class="tab" data-tab="incidents">Incidents</button>
+  <button class="tab" data-tab="vessels">Navires</button>
+  <button class="tab" data-tab="mel">MEL</button>
+  <button class="tab" data-tab="team">Cellule</button>
+  <button class="tab" data-tab="actions">Actions</button>
+  <button class="tab" data-tab="decisions">Décisions</button>
+  <button class="tab" data-tab="anticipation">Anticipation</button>
+  <button class="tab" data-tab="comms">Comms</button>
+  <button class="tab" data-tab="stakeholders">Contacts</button>
+  <button class="tab" data-tab="resources">Ressources</button>
+  <button class="tab" data-tab="risk">Risques</button>
+  <button class="tab" data-tab="rhythm">Battle rhythm</button>
+  <button class="tab" data-tab="passation">Passation</button>
+  <button class="tab" data-tab="sitrep">SITREP</button>
+  <button class="tab" data-tab="opord">OPORD</button>
+  <button class="tab" data-tab="playbooks">Playbooks</button>
+  <button class="tab" data-tab="ccir">CCIR</button>
+  <button class="tab" data-tab="retex">RETEX</button>
+  <button class="tab" data-tab="exercises">Exercices</button>
+</nav>
+
+<main id="main"></main>
+
+<!-- Floating Action Button — saisie rapide -->
+<div id="fab" class="fab" hidden>
+  <button class="fab-main" id="fabMain" title="Action rapide (n)">+</button>
+  <div class="fab-menu" id="fabMenu" hidden>
+    <button data-quick="mel" title="Log MEL (l)"><span class="kbd">L</span> Événement (MEL)</button>
+    <button data-quick="action" title="Nouvelle action"><span class="kbd">A</span> Action</button>
+    <button data-quick="decision" title="Nouvelle décision OODA"><span class="kbd">D</span> Décision</button>
+    <button data-quick="comm" title="Nouvelle comm"><span class="kbd">K</span> Comm</button>
+    <button data-quick="incident" title="Nouvel incident"><span class="kbd">I</span> Incident</button>
+  </div>
+</div>
+
+<!-- Datalists partagées (auto-complétion) -->
+<datalist id="dl-authors"></datalist>
+<datalist id="dl-owners"></datalist>
+<datalist id="dl-channels">
+  <option>VHF</option><option>HF</option><option>Inmarsat</option><option>LRIT</option>
+  <option>Téléphone</option><option>Email</option><option>SSAS</option><option>Sat-C</option>
+  <option>Telegram</option><option>Press</option>
+</datalist>
+<datalist id="dl-parties"></datalist>
+<datalist id="dl-vessels"></datalist>
+
+<!-- Modal générique -->
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="modalTitle">Titre</h3>
+      <button class="btn-ghost" id="modalClose" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot muted">
+      Astuce : <span class="kbd">Ctrl</span>+<span class="kbd">Entrée</span> pour valider, <span class="kbd">Esc</span> pour fermer.
+    </div>
+  </div>
+</div>
+
+<!-- Aide raccourcis -->
+<div id="helpModal" class="modal hidden" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>Raccourcis clavier</h3>
+      <button class="btn-ghost" id="helpClose" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div>
+          <h4>Navigation</h4>
+          <table class="kbd-table">
+            <tr><td><span class="kbd">G</span> <span class="kbd">C</span></td><td>COP</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">I</span></td><td>Incidents</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">V</span></td><td>Navires</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">M</span></td><td>MEL</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">A</span></td><td>Actions</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">D</span></td><td>Décisions</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">K</span></td><td>Comms</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">H</span></td><td>Contacts</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">R</span></td><td>Risques</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">B</span></td><td>Battle rhythm</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">S</span></td><td>SITREP</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">P</span></td><td>Playbooks</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">E</span></td><td>CCIR</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">T</span></td><td>Cellule</td></tr>
+          </table>
+        </div>
+        <div>
+          <h4>Saisie rapide</h4>
+          <table class="kbd-table">
+            <tr><td><span class="kbd">N</span></td><td>Nouveau (selon onglet)</td></tr>
+            <tr><td><span class="kbd">L</span></td><td>Log MEL rapide</td></tr>
+            <tr><td><span class="kbd">A</span></td><td>Nouvelle action</td></tr>
+            <tr><td><span class="kbd">D</span></td><td>Nouvelle décision</td></tr>
+            <tr><td><span class="kbd">K</span></td><td>Nouvelle comm</td></tr>
+            <tr><td><span class="kbd">I</span></td><td>Nouvel incident</td></tr>
+            <tr><td><span class="kbd">S</span></td><td>SITREP</td></tr>
+            <tr><td><span class="kbd">?</span></td><td>Cette aide</td></tr>
+          </table>
+          <h4 style="margin-top:14px">Édition</h4>
+          <table class="kbd-table">
+            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">Entrée</span></td><td>Valider formulaire</td></tr>
+            <tr><td><span class="kbd">Esc</span></td><td>Fermer / annuler</td></tr>
+            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">L</span></td><td>Verrouiller</td></tr>
+            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">K</span></td><td>Recherche globale</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  <span>CrisisCell · Inspiré ICS · OODA · NATO SITREP · IMO A.1072(28) · BMP5 · ISM Code</span>
+  <span id="storageStatus">🔐 Données chiffrées localement (AES-GCM 256).</span>
+</footer>
+
+</div><!-- /#appShell -->
+
+<script src="data/playbooks.js"></script>
+<script src="auth.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

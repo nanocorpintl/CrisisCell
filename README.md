@@ -2,57 +2,116 @@
 
 Outil web autonome de gestion de cellule de crise pour un armement maritime
 (CMA Ships). Application **single-page**, sans dépendance ni back-end —
-ouvrir `index.html` dans un navigateur suffit. Persistance locale dans le
-navigateur (`localStorage`), import/export JSON pour sauvegardes et passation.
+ouvrir `index.html` dans un navigateur récent. **Toutes les données sont
+chiffrées localement (AES-GCM 256, PBKDF2 250 000 itérations)** et
+inaccessibles sans le mot de passe.
+
+## Sécurité
+
+| Mesure | Détail |
+|---|---|
+| Chiffrement au repos | AES-GCM 256 bits sur l'intégralité du coffre `localStorage` |
+| Dérivation de clé | PBKDF2-SHA-256, 250 000 itérations, sel 128 bits aléatoire |
+| Stockage de la clé | Mémoire JS uniquement, jamais persistée, vidée au verrouillage |
+| Verrou anti brute force | Lockout progressif : 30 s / 5 min / 15 min / 1 h après 3/5/7/10 échecs |
+| Verrouillage automatique | Inactivité > 15 min → lock + effacement clé |
+| CSP stricte | `default-src 'self'`, pas de CDN, pas d'inline scripts, `frame-ancestors 'none'` |
+| Pas d'indexation | `noindex, nofollow, noarchive`, `Referrer: no-referrer` |
+| Mot de passe minimum | 12 caractères, score mixte ≥ 4/7 (longueur + casse + chiffres + symboles) |
+| Changement de mot de passe | Re-chiffrement complet du coffre |
+| Export | Choix : chiffré (recommandé pour partage) ou en clair (avec confirmation) |
+| Réinitialisation | Confirmation explicite par saisie de "SUPPRIMER" |
+
+**À déployer derrière HTTPS** (WebCrypto exige un contexte sécurisé). Sur
+`localhost` ou `file://` la plupart des navigateurs l'acceptent aussi.
 
 ## Inspirations
 
 | Source | Apport |
 |---|---|
-| **ICS** (Incident Command System, FEMA) | Rôles cellule (CMD / OPS / PLN / LOG / FIN / LIA / PIO), structure d'organisation |
-| **OODA Loop** (J. Boyd, USAF) | Journal des décisions en 4 phases : Observe / Orient / Decide / Act |
-| **NATO SITREP** (5 paragraphes) | Générateur de SITREP formaté, avec DTG militaire, classification, prochain rapport |
-| **CCIR / PIR / FFIR / EEFI** | Module dédié aux besoins informationnels du Crisis Manager |
-| **Battle Rhythm** | Cadence des briefings et SITREPs |
-| **SALUTE / 9-Line MEDEVAC** | Intégrés dans les playbooks (piraterie, médical) |
+| **ICS** (FEMA) | Rôles cellule (CMD/OPS/PLN/LOG/FIN/LIA/PIO/SAF/SEC) |
+| **OODA Loop** (Boyd, USAF) | Journal de décisions en 4 phases |
+| **NATO SITREP / OPORD** | Générateurs aux formats 5 paragraphes (SMEAC/OEEEAR) |
+| **CCIR / PIR / FFIR / EEFI** | Module dédié aux besoins informationnels |
+| **Battle rhythm** | Cadence des briefings, passation de quart |
+| **AAR — After-Action Review** (US Army FM 6-22) | Module RETEX 4 questions, conversion en actions |
+| **SALUTE / 9-Line MEDEVAC** | Intégrés aux playbooks |
+| **REX Marine nationale** | Passation de quart formelle avec sign-off, watch officer rotation |
+| **REX EDF / ASN** | Cellule Anticipation H+6/24/72, règle des 3R, single voice principle, échelle de gravité INES |
 | **F24 / Veoci / Everbridge / D4H** | Patterns UX : MEL, action board, COP, annuaire de crise |
-| **IMO Resolution A.1072(28)** | Cadre de gestion des crises majeures côté armatorial |
+| **IMO Resolution A.1072(28)** | Cadre de gestion des crises côté armatorial |
 | **ISM Code** | Plans d'urgence à bord et continuité ashore |
-| **BMP5** | Procédure piraterie / haute mer à risque |
+| **BMP5** | Procédure piraterie / use of force continuum / niveaux ROE |
 | **SOLAS, ISPS, MARPOL, IMDG, COLREG** | Référentiels par playbook |
 | **BIMCO Cyber Guidelines v4 / IMO MSC-FAL.1/Circ.3** | Playbook cyber maritime |
 
-## Modules
+## Modules (20)
 
-1. **COP** — Common Operational Picture : KPI, OODA, incidents actifs, navires impactés, MEL récent, CCIR.
-2. **Incidents** — création / suivi / clôture avec sévérité et statut.
-3. **Navires** — registre flotte avec statut (Normal / À risque / Incident / Sécurisé / Port refuge).
-4. **Main Events Log** — journal chronologique horodaté UTC, immuable, exportable.
-5. **Cellule** — équipe d'astreinte avec rôles ICS adaptés au maritime (DPA, CSO, etc.).
-6. **Actions** — tâches priorisées (P1/P2/P3) avec owner et échéance.
-7. **Décisions** — chaque décision tracée selon la boucle OODA.
-8. **Comms** — toutes communications entrantes/sortantes (canal, contrepartie, contenu).
-9. **Parties prenantes** — annuaire P1/P2/P3 (MRCC, UKMTO, MDAT-GoG, P&I, État pavillon…).
-10. **Matrice de risque** — 5×5 likelihood × severity, registre détaillé.
-11. **Battle rhythm** — cadence des points cellule et SITREPs.
-12. **SITREP** — générateur de rapport au format NATO 5 paragraphes, version classifiable, imprimable, téléchargeable.
-13. **Playbooks** — checklists pour : piraterie, incendie, collision, échouement, MOB, MEDEVAC, cyber, pollution, sûreté ISPS, clandestins, IMDG, désertion. Activation = création automatique des actions correspondantes.
-14. **CCIR** — Priority IR / Friendly Force IR / EEFI.
+1. **COP** — Phase de cinétique, KPI, OODA, incidents actifs, anticipation H+24, MEL récent, **saisie rapide intégrée**.
+2. **Incidents** — création / suivi / clôture avec **niveau INES** (0-7), **niveau ROE** (1-5 BMP5), **Commander's Intent** et **End-State**.
+3. **Navires** — registre flotte (Normal / À risque / Incident / Sécurisé / Port refuge).
+4. **MEL** — Main Events Log horodaté UTC, immuable, exportable.
+5. **Cellule** — équipe d'astreinte avec rôles ICS adaptés (DPA, CSO, ANT, WRT).
+6. **Actions** — P1/P2/P3, owner, échéance, **clic sur statut pour cycle**.
+7. **Décisions** — boucle OODA tracée.
+8. **Anticipation** — *cellule prospective REX nucléaire* H+6/24/72 best/likely/worst + signaux à surveiller.
+9. **Comms** — entrantes/sortantes, **validation single-voice** (REX EDF/Marine).
+10. **Contacts** — annuaire P1/P2/P3 (MRCC, UKMTO, MDAT-GoG, P&I…).
+11. **Ressources** — moyens mobilisés (remorqueurs, salvors, médical, PCASP, agents).
+12. **Risques** — matrice 5×5 cliquable.
+13. **Battle rhythm** — cadence des briefings.
+14. **Passation de quart** — *handover naval avec checklist + sign-off de la relève* + pré-remplissage automatique.
+15. **SITREP** — générateur NATO 5 paragraphes, classification, imprimable, téléchargeable.
+16. **OPORD** — *générateur d'ordre d'opération* 5 paragraphes (Situation/Mission/Exécution/Soutien/Cdt-Trans), avec intention, end-state, no-go.
+17. **Playbooks** — 12 checklists d'urgence maritime activables (création automatique des actions).
+18. **CCIR** — PIR / FFIR / EEFI.
+19. **RETEX** — *AAR US Army 4 questions*, conversion des Lessons Identified en actions.
+20. **Exercices** — table-top / functional / full-scale avec **MSEL** (Master Scenario Events List).
+
+## Saisie ultra-rapide
+
+| Touche | Action |
+|---|---|
+| `?` | Affiche la liste des raccourcis |
+| `L` | Saisir un événement MEL |
+| `A`, `D`, `K`, `I` | Nouvelle action / décision / comm / incident |
+| `N` | Nouveau (sensible à l'onglet courant) |
+| `S` | SITREP |
+| `G` puis lettre | Aller à un onglet (`G C` = COP, `G I` = incidents, etc.) |
+| `Ctrl+Entrée` | Valider la modal |
+| `Esc` | Fermer la modal |
+| `Ctrl+L` | Verrouiller |
+| `Ctrl+K` | Recherche globale (à venir) |
+
+Plus :
+- **Auto-focus** sur le premier champ à l'ouverture d'une modal
+- **Auto-complétion** (datalists) pour auteurs, owners, parties, navires, canaux
+- **Pré-remplissage** : nom de l'utilisateur connecté comme auteur par défaut, état courant pré-rempli dans la passation
+- **FAB** flottant pour ajout rapide depuis n'importe quel onglet
 
 ## Niveaux d'alerte
 
-- **VERT** — veille normale
-- **JAUNE** — vigilance renforcée
-- **ORANGE** — pré-alerte cellule
-- **ROUGE** — cellule de crise activée
-- **NOIR** — crise majeure / continuité d'activité
+VERT (veille) → JAUNE (vigilance) → ORANGE (pré-alerte) → ROUGE (cellule activée) → NOIR (crise majeure / continuité).
+
+## Phases de crise
+
+RÉFLEXE (3R : Reculer/Rendre compte/Réfléchir) → CONCERTÉE (cellule constituée, OPORD, battle rhythm) → POST-CRISE (RETEX, capitalisation, communication post-incident).
+
+## Échelle de gravité maritime (adaptée INES)
+
+0 Écart · 1 Anomalie · 2 Incident · 3 Incident sérieux · 4 Accident sans impact extérieur · 5 Accident à conséquences locales · 6 Accident grave · 7 Accident majeur.
+
+## Niveaux de ROE (BMP5)
+
+1 Vigilance · 2 Mesures passives · 3 Mesures actives non létales · 4 Coordination forces armées (PCASP) · 5 Légitime défense.
 
 ## Utilisation
 
-Ouvrir `index.html` dans un navigateur récent. Aucune installation. Toutes les
-données restent locales au navigateur (RGPD-friendly). Pour partager l'état
-entre membres de la cellule, utiliser **Export JSON** puis **Import JSON**
-(ou héberger le dossier sur un partage sécurisé).
+1. Ouvrir `index.html` dans un navigateur récent (de préférence via HTTPS).
+2. Première fois : créer un mot de passe ≥ 12 caractères.
+3. Renseigner votre nom de poste — il sera l'auteur par défaut des saisies.
+4. Le coffre se chiffre/déchiffre automatiquement.
+5. Pour partager la cellule : utiliser `Export chiffré` puis `Import` côté autre poste avec le même mot de passe.
 
 ## Avertissement
 
@@ -60,3 +119,5 @@ Ce outil est un canevas opérationnel. Les playbooks intégrés sont des
 synthèses non exhaustives, à confronter aux procédures internes CMA Ships,
 au Safety Management System (ISM), au Ship Security Plan (ISPS) et aux
 obligations de l'État du pavillon avant toute utilisation en réel.
+La cybersécurité repose sur le mot de passe choisi et l'environnement
+d'exécution (navigateur récent, contexte sécurisé HTTPS).

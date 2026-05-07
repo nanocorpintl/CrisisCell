@@ -1,118 +1,338 @@
-/* CrisisCell — application principale
- * Inspiré des frameworks ICS, OODA, NATO SITREP et procédures maritimes IMO/ISM.
- * Aucune dépendance externe. Persistance localStorage.
+/* CrisisCell — application principale (v2)
+ * - Persistance chiffrée AES-GCM via CrisisAuth (window.CrisisAuth)
+ * - UX accélérée : raccourcis clavier, FAB, auto-focus, datalists, Ctrl+Entrée
+ * - Modules doctrinaux maritimes / militaires / nucléaire :
+ *   COP, Incidents, Navires, MEL, Cellule, Actions, Décisions OODA,
+ *   Anticipation H+6/24/72, Comms, Contacts, Ressources, Risques,
+ *   Battle rhythm, Passation de quart, SITREP, OPORD, Playbooks,
+ *   CCIR, RETEX (AAR), Exercices (MSEL).
  */
 (function () {
   'use strict';
 
-  // ----------------------------- ÉTAT -------------------------------------
-  const STORAGE_KEY = 'crisiscell.cma.v1';
-  const defaultState = () => ({
-    alert: 'green',
-    opsPeriod: '',
-    sitrepCounter: 0,
-    incidents: [],
-    vessels: [
-      // Quelques navires d'exemple pour illustrer
-      { id: id(), name: 'CMA CGM JACQUES SAADE', imo: '9839179', type: 'ULCV', status: 'normal', position: '', notes: '' },
-      { id: id(), name: 'CMA CGM MARCO POLO', imo: '9454436', type: 'ULCV', status: 'normal', position: '', notes: '' },
-      { id: id(), name: 'CMA CGM PALAIS ROYAL', imo: '9839181', type: 'ULCV', status: 'normal', position: '', notes: '' }
-    ],
-    mel: [],
-    team: [],
-    actions: [],
-    decisions: [],
-    comms: [],
-    stakeholders: [
-      { id: id(), name: 'MRCC Gris-Nez',      role: 'Coord. SAR',          contact: '+33 3 21 87 21 87', priority: 'P1' },
-      { id: id(), name: 'UKMTO Dubai',        role: 'Sûreté Océan Indien', contact: '+971 4 306 5180',   priority: 'P1' },
-      { id: id(), name: 'MDAT-GoG',           role: 'Sûreté Golfe Guinée', contact: '+33 2 98 22 88 88', priority: 'P1' },
-      { id: id(), name: 'P&I Club',           role: 'Assurance',           contact: '24/7 hotline',      priority: 'P1' },
-      { id: id(), name: 'État du pavillon',   role: 'Autorité',            contact: 'à compléter',       priority: 'P1' }
-    ],
-    risks: [],
-    rhythm: [
-      { id: id(), time: '08:00', title: 'Stand-up cellule', cadence: 'Quotidien', desc: 'Synthèse, COP, décisions du jour' },
-      { id: id(), time: '12:00', title: 'SITREP N°x',       cadence: '6H',        desc: 'Diffusion SITREP HQ + autorités' },
-      { id: id(), time: '18:00', title: 'Battle update',    cadence: 'Quotidien', desc: 'Bascule équipe nuit, transmissions' }
-    ],
-    sitreps: [],
-    playbookState: {},
-    ccir: window.CCIR_TEMPLATE.map(c => ({ ...c, id: id(), items: [] }))
-  });
+  // ============================================================
+  //   ÉTAT
+  // ============================================================
+  const OLD_KEY = 'crisiscell.cma.v1';
+  const IDLE_MS = 15 * 60 * 1000; // 15 min
+  let state = null;
+  let currentTab = 'cop';
+  let saveTimer = null;
+  let lastActivity = Date.now();
+  let pendingPrefix = null;
+  let pendingPrefixTimer = null;
 
-  let state = load();
-
-  function id() { return Math.random().toString(36).slice(2, 10); }
+  // ============================================================
+  //   HELPERS
+  // ============================================================
+  function id() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
   function nowISO() { return new Date().toISOString(); }
   function fmtDTG(iso) {
     if (!iso) return '';
     const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
     const pad = n => String(n).padStart(2, '0');
-    // DTG format militaire : DDHHMMZ MMM YY
-    const dd = pad(d.getUTCDate());
-    const hh = pad(d.getUTCHours());
-    const mm = pad(d.getUTCMinutes());
     const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-    const mo = months[d.getUTCMonth()];
-    const yy = String(d.getUTCFullYear()).slice(2);
-    return `${dd}${hh}${mm}Z ${mo} ${yy}`;
+    return `${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}Z ${months[d.getUTCMonth()]} ${String(d.getUTCFullYear()).slice(2)}`;
   }
   function fmtTime(iso) {
     if (!iso) return '';
     const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
     return d.toISOString().replace('T', ' ').slice(0, 16) + 'Z';
-  }
-  function load() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultState();
-      const s = JSON.parse(raw);
-      const def = defaultState();
-      // merge to handle new fields between versions
-      return Object.assign(def, s);
-    } catch { return defaultState(); }
-  }
-  function save() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) { console.error(e); }
-  }
-  function logMEL(category, text, author) {
-    state.mel.unshift({
-      id: id(),
-      ts: nowISO(),
-      cat: category,
-      author: author || 'Système',
-      text
-    });
-    save();
-  }
-  function escape(s) {
-    return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
   }
   function el(tag, attrs = {}, ...children) {
     const e = document.createElement(tag);
-    Object.entries(attrs).forEach(([k, v]) => {
+    Object.entries(attrs || {}).forEach(([k, v]) => {
+      if (v == null || v === false) return;
       if (k === 'class') e.className = v;
-      else if (k === 'html') e.innerHTML = v;
+      else if (k === 'html') e.innerHTML = v;            // utilisé uniquement avec contenu maîtrisé
       else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
-      else if (v === false || v == null) {}
       else e.setAttribute(k, v);
     });
     children.flat().forEach(c => {
       if (c == null || c === false) return;
-      e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      e.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
     });
     return e;
   }
+  function $(sel) { return document.querySelector(sel); }
 
-  // ----------------------------- TOP BAR ----------------------------------
+  // ============================================================
+  //   ÉTAT PAR DÉFAUT
+  // ============================================================
+  function defaultState() {
+    return {
+      alert: 'green',
+      phase: 'reflex',
+      opsPeriod: '',
+      sitrepCounter: 0,
+      opordCounter: 0,
+      incidents: [],
+      vessels: [
+        { id: id(), name: 'CMA CGM JACQUES SAADE', imo: '9839179', type: 'ULCV', status: 'normal', position: '', notes: '' },
+        { id: id(), name: 'CMA CGM MARCO POLO',    imo: '9454436', type: 'ULCV', status: 'normal', position: '', notes: '' },
+        { id: id(), name: 'CMA CGM PALAIS ROYAL',  imo: '9839181', type: 'ULCV', status: 'normal', position: '', notes: '' }
+      ],
+      mel: [],
+      team: [],
+      actions: [],
+      decisions: [],
+      anticipation: [],
+      comms: [],
+      stakeholders: [
+        { id: id(), name: 'MRCC Gris-Nez',    role: 'Coord. SAR',          contact: '+33 3 21 87 21 87', priority: 'P1' },
+        { id: id(), name: 'UKMTO Dubai',      role: 'Sûreté Océan Indien', contact: '+971 4 306 5180',   priority: 'P1' },
+        { id: id(), name: 'MDAT-GoG',         role: 'Sûreté Golfe Guinée', contact: '+33 2 98 22 88 88', priority: 'P1' },
+        { id: id(), name: 'P&I Club',         role: 'Assurance',           contact: '24/7 hotline',      priority: 'P1' },
+        { id: id(), name: 'État du pavillon', role: 'Autorité',            contact: 'à compléter',       priority: 'P1' }
+      ],
+      resources: [],
+      risks: [],
+      rhythm: [
+        { id: id(), time: '08:00', title: 'Stand-up cellule', cadence: 'Quotidien', desc: 'COP, intentions, décisions du jour' },
+        { id: id(), time: '12:00', title: 'SITREP N°x',       cadence: '6H',        desc: 'Diffusion HQ + autorités' },
+        { id: id(), time: '14:00', title: 'Briefing Anticipation', cadence: 'Quotidien', desc: 'Cellule prospective H+24/72' },
+        { id: id(), time: '18:00', title: 'Battle update + Passation', cadence: 'Quotidien', desc: 'Bascule équipe nuit, hand-over formel' }
+      ],
+      passations: [],
+      sitreps: [],
+      opords: [],
+      playbookState: {},
+      ccir: window.CCIR_TEMPLATE.map(c => ({ ...c, id: id(), items: [] })),
+      retex: [],
+      exercises: []
+    };
+  }
+
+  // ============================================================
+  //   AUTH FLOW
+  // ============================================================
+  async function init() {
+    if (!window.crypto?.subtle) {
+      authBody().appendChild(el('div', { class: 'auth-error' },
+        'WebCrypto indisponible. Servez ce site via HTTPS ou localhost.'));
+      return;
+    }
+    if (!CrisisAuth.isInitialized()) showSetup();
+    else showUnlock();
+  }
+  function authBody() {
+    const body = $('#authBody');
+    body.innerHTML = '';
+    return body;
+  }
+
+  function showSetup() {
+    const body = authBody();
+    const oldData = localStorage.getItem(OLD_KEY);
+
+    body.appendChild(el('div', { class: 'auth-info' },
+      'Première utilisation. Définissez un mot de passe robuste : il chiffre TOUTES les données localement (AES-GCM 256). Aucune récupération possible si oublié.'
+    ));
+
+    if (oldData) {
+      body.appendChild(el('div', { class: 'auth-warn' },
+        'Données antérieures détectées (non chiffrées). Elles seront migrées dans le coffre.'
+      ));
+    }
+
+    const errBox = el('div');
+    const userInput = el('input', { type: 'text', placeholder: 'Ex. CMD jdupont', autocomplete: 'off', maxlength: 64 });
+    const pwd1 = el('input', { type: 'password', autocomplete: 'new-password', minlength: 12 });
+    const pwd2 = el('input', { type: 'password', autocomplete: 'new-password' });
+    const meterBar = el('div', { class: 'pwd-bar' });
+    const meterLabel = el('div', { class: 'pwd-label' }, 'Force : —');
+    const submit = el('button', { class: 'auth-btn', type: 'submit' }, 'Initialiser le coffre');
+
+    pwd1.addEventListener('input', () => {
+      const score = CrisisAuth.passwordStrength(pwd1.value);
+      meterBar.style.width = ((score / 7) * 100) + '%';
+      meterBar.style.background = score >= 6 ? '#2ecc71' : score >= 4 ? '#f1c40f' : '#e74c3c';
+      meterLabel.textContent = 'Force : ' + CrisisAuth.strengthLabel(score) + ` (${score}/7)`;
+    });
+
+    const form = el('form', { class: 'auth-form', autocomplete: 'off' },
+      errBox,
+      el('label', {}, 'Votre nom / poste (auteur des saisies)'),
+      userInput,
+      el('label', {}, 'Mot de passe (≥12 caractères, mixte)'),
+      pwd1,
+      el('div', { class: 'pwd-meter' }, meterBar),
+      meterLabel,
+      el('label', {}, 'Confirmer le mot de passe'),
+      pwd2,
+      submit
+    );
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      errBox.innerHTML = '';
+      if (!userInput.value.trim()) {
+        errBox.appendChild(el('div', { class: 'auth-error' }, 'Indiquez votre nom / poste.'));
+        return;
+      }
+      if (pwd1.value !== pwd2.value) {
+        errBox.appendChild(el('div', { class: 'auth-error' }, 'Les mots de passe ne correspondent pas.'));
+        return;
+      }
+      submit.disabled = true; submit.textContent = 'Chiffrement…';
+      try {
+        await CrisisAuth.setup(pwd1.value);
+        // Migration si données existantes
+        if (oldData) {
+          try {
+            state = Object.assign(defaultState(), JSON.parse(oldData));
+            localStorage.removeItem(OLD_KEY);
+          } catch { state = defaultState(); }
+        } else {
+          state = defaultState();
+        }
+        await CrisisAuth.saveState(state);
+        CrisisAuth.setUser(userInput.value.trim());
+        boot();
+      } catch (e) {
+        errBox.appendChild(el('div', { class: 'auth-error' }, e.message));
+        submit.disabled = false; submit.textContent = 'Initialiser le coffre';
+      }
+    });
+    body.appendChild(form);
+    setTimeout(() => userInput.focus(), 50);
+  }
+
+  function showUnlock() {
+    document.body.classList.add('locked');
+    $('#appShell').hidden = true;
+    const body = authBody();
+    const lo = CrisisAuth.lockoutInfo();
+    if (lo.locked) {
+      body.appendChild(el('div', { class: 'auth-error' },
+        `Verrouillé suite à trop de tentatives. Réessayez dans ${Math.ceil(lo.remainingMs / 1000)}s.`));
+    }
+    const errBox = el('div');
+    const userInput = el('input', { type: 'text', placeholder: 'Votre nom / poste', autocomplete: 'username',
+      value: (CrisisAuth.getUser() || {}).name || '' });
+    const pwd = el('input', { type: 'password', autocomplete: 'current-password' });
+    const submit = el('button', { class: 'auth-btn', type: 'submit' }, 'Déverrouiller');
+    const resetBtn = el('button', { class: 'btn-ghost', type: 'button', style: 'width:100%;margin-top:8px' }, 'Réinitialiser le coffre…');
+    resetBtn.addEventListener('click', () => {
+      const conf = prompt('Tout effacer ? Tapez SUPPRIMER pour confirmer :');
+      if (conf === 'SUPPRIMER') {
+        CrisisAuth.reset();
+        localStorage.removeItem(OLD_KEY);
+        showSetup();
+      }
+    });
+
+    const form = el('form', { class: 'auth-form', autocomplete: 'on' },
+      errBox,
+      el('label', {}, 'Nom / poste'),
+      userInput,
+      el('label', {}, 'Mot de passe'),
+      pwd,
+      submit,
+      resetBtn
+    );
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      errBox.innerHTML = '';
+      submit.disabled = true; submit.textContent = 'Vérification…';
+      try {
+        await CrisisAuth.unlock(pwd.value);
+        CrisisAuth.setUser(userInput.value.trim() || 'Anonyme');
+        state = await CrisisAuth.loadState() || defaultState();
+        boot();
+      } catch (e) {
+        errBox.appendChild(el('div', { class: 'auth-error' }, e.message));
+        submit.disabled = false; submit.textContent = 'Déverrouiller';
+        pwd.value = ''; pwd.focus();
+      }
+    });
+    body.appendChild(form);
+    setTimeout(() => (userInput.value ? pwd : userInput).focus(), 50);
+  }
+
+  function boot() {
+    document.body.classList.remove('locked');
+    $('#appShell').hidden = false;
+    $('#authOverlay').style.display = 'none';
+    $('#fab').hidden = false;
+    bindShell();
+    refreshDatalists();
+    renderUserChip();
+    setTab(currentTab);
+    startIdleWatch();
+    tickClocks();
+    setInterval(tickClocks, 1000);
+  }
+
+  function lockNow(reason) {
+    CrisisAuth.lock();
+    state = null;
+    $('#appShell').hidden = true;
+    $('#authOverlay').style.display = '';
+    if (reason) toast(reason, 'warn');
+    showUnlock();
+  }
+
+  // ============================================================
+  //   TOPBAR / SHELL
+  // ============================================================
+  function bindShell() {
+    document.querySelectorAll('.tab').forEach(t => {
+      t.addEventListener('click', () => setTab(t.dataset.tab));
+    });
+    const sel = $('#alertSelect');
+    sel.value = state.alert;
+    sel.addEventListener('change', () => {
+      state.alert = sel.value;
+      applyAlertClass();
+      logMEL('INFO', `Niveau d'alerte changé : ${state.alert.toUpperCase()}`);
+      save();
+      if (currentTab === 'cop') setTab('cop');
+    });
+    applyAlertClass();
+    const ops = $('#opsPeriod');
+    ops.value = state.opsPeriod || '';
+    ops.addEventListener('change', () => { state.opsPeriod = ops.value; save(); });
+    $('#modalClose').addEventListener('click', closeModal);
+    $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+    $('#helpBtn').addEventListener('click', () => $('#helpModal').classList.remove('hidden'));
+    $('#helpClose').addEventListener('click', () => $('#helpModal').classList.add('hidden'));
+    $('#helpModal').addEventListener('click', e => { if (e.target.id === 'helpModal') $('#helpModal').classList.add('hidden'); });
+    $('#exportData').addEventListener('click', exportJSON);
+    $('#importData').addEventListener('click', () => $('#importFile').click());
+    $('#importFile').addEventListener('change', e => { if (e.target.files[0]) importJSON(e.target.files[0]); });
+    $('#changePwdBtn').addEventListener('click', changePasswordDialog);
+    $('#lockBtn').addEventListener('click', () => lockNow());
+    $('#resetAll').addEventListener('click', () => {
+      const conf = prompt('Tout effacer (incl. coffre chiffré) ? Tapez SUPPRIMER :');
+      if (conf === 'SUPPRIMER') { CrisisAuth.reset(); location.reload(); }
+    });
+    // FAB
+    $('#fabMain').addEventListener('click', toggleFab);
+    document.querySelectorAll('#fabMenu button').forEach(b => {
+      b.addEventListener('click', () => { quickAction(b.dataset.quick); toggleFab(false); });
+    });
+    // Keyboard global
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousemove', () => lastActivity = Date.now());
+    document.addEventListener('keypress', () => lastActivity = Date.now());
+    document.addEventListener('click', () => lastActivity = Date.now());
+  }
+
+  function renderUserChip() {
+    const u = CrisisAuth.getUser();
+    const chip = $('#userChip');
+    if (u) {
+      chip.textContent = '👤 ' + u.name;
+      chip.classList.add('show');
+    } else {
+      chip.classList.remove('show');
+    }
+  }
+  function currentUserName() {
+    return (CrisisAuth.getUser() || {}).name || '';
+  }
   function applyAlertClass() {
     document.body.classList.remove('alert-green','alert-yellow','alert-orange','alert-red','alert-black');
     document.body.classList.add('alert-' + state.alert);
@@ -120,144 +340,359 @@
   function tickClocks() {
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
-    document.getElementById('utcClock').textContent =
-      `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
-    document.getElementById('localClock').textContent =
-      `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  }
-
-  // ----------------------------- MODAL ------------------------------------
-  function openModal(title, contentNode) {
-    document.getElementById('modalTitle').textContent = title;
-    const body = document.getElementById('modalBody');
-    body.innerHTML = '';
-    body.appendChild(contentNode);
-    document.getElementById('modal').classList.remove('hidden');
-  }
-  function closeModal() { document.getElementById('modal').classList.add('hidden'); }
-
-  // ----------------------------- ROUTING ----------------------------------
-  let currentTab = 'cop';
-  const renderers = {};
-  function setTab(tab) {
-    currentTab = tab;
-    document.querySelectorAll('.tab').forEach(t => {
-      t.classList.toggle('active', t.dataset.tab === tab);
-    });
-    const main = document.getElementById('main');
-    main.innerHTML = '';
-    const fn = renderers[tab];
-    if (fn) fn(main);
+    const utc = $('#utcClock'); if (utc) utc.textContent = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
+    const lcl = $('#localClock'); if (lcl) lcl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   }
 
   // ============================================================
-  //  TAB : COP — Common Operational Picture
+  //   IDLE / LOCK
+  // ============================================================
+  function startIdleWatch() {
+    setInterval(() => {
+      if (!CrisisAuth.isUnlocked()) return;
+      const idle = Date.now() - lastActivity;
+      if (idle > IDLE_MS) lockNow('Verrouillage automatique pour inactivité (15 min).');
+      else if (idle > IDLE_MS - 60000 && !$('#idleToast')) {
+        const t = toast('Verrouillage dans 1 min sans activité…', 'warn');
+        if (t) t.id = 'idleToast';
+      }
+    }, 30000);
+  }
+
+  // ============================================================
+  //   PERSISTENCE (chiffrée, debounced)
+  // ============================================================
+  function save() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      if (!CrisisAuth.isUnlocked()) return;
+      try { await CrisisAuth.saveState(state); }
+      catch (e) { console.error('save failed', e); toast('Échec sauvegarde : ' + e.message, 'danger'); }
+    }, 200);
+  }
+  async function saveSync() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (!CrisisAuth.isUnlocked()) return;
+    try { await CrisisAuth.saveState(state); }
+    catch (e) { console.error(e); }
+  }
+
+  function logMEL(category, text, author) {
+    state.mel.unshift({
+      id: id(), ts: nowISO(),
+      cat: category,
+      author: author || currentUserName() || 'Système',
+      text
+    });
+    save();
+  }
+
+  // ============================================================
+  //   TOASTS
+  // ============================================================
+  function toast(msg, level) {
+    const t = el('div', { class: 'toast ' + (level || '') }, msg);
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4500);
+    return t;
+  }
+
+  // ============================================================
+  //   MODAL
+  // ============================================================
+  function openModal(title, contentNode, opts) {
+    $('#modalTitle').textContent = title;
+    const body = $('#modalBody');
+    body.innerHTML = '';
+    body.appendChild(contentNode);
+    $('#modal').classList.remove('hidden');
+    // Auto-focus first input
+    setTimeout(() => {
+      const first = body.querySelector('input, textarea, select');
+      if (first) first.focus();
+    }, 30);
+    // Ctrl+Enter to submit primary action
+    body._submitAction = opts && opts.onSubmit;
+  }
+  function closeModal() { $('#modal').classList.add('hidden'); }
+
+  // ============================================================
+  //   KEYBOARD SHORTCUTS
+  // ============================================================
+  function onKeyDown(e) {
+    lastActivity = Date.now();
+    const inField = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName);
+
+    // Escape ferme la modal
+    if (e.key === 'Escape') {
+      const helpOpen = !$('#helpModal').classList.contains('hidden');
+      const modalOpen = !$('#modal').classList.contains('hidden');
+      if (helpOpen) { $('#helpModal').classList.add('hidden'); e.preventDefault(); return; }
+      if (modalOpen) { closeModal(); e.preventDefault(); return; }
+      const fabOpen = !$('#fabMenu').hidden;
+      if (fabOpen) { toggleFab(false); e.preventDefault(); return; }
+    }
+
+    // Ctrl+Enter dans une zone de saisie : valider la modal
+    if (inField && e.ctrlKey && e.key === 'Enter') {
+      const body = $('#modalBody');
+      if (body && body._submitAction) {
+        e.preventDefault();
+        body._submitAction();
+      }
+      return;
+    }
+
+    // Ctrl+L = lock
+    if (e.ctrlKey && e.key.toLowerCase() === 'l') {
+      e.preventDefault(); lockNow(); return;
+    }
+
+    if (inField) return;
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+    // Séquence préfixée 'g'
+    if (pendingPrefix === 'g') {
+      pendingPrefix = null;
+      clearTimeout(pendingPrefixTimer);
+      const map = {
+        c: 'cop', i: 'incidents', v: 'vessels', m: 'mel', t: 'team',
+        a: 'actions', d: 'decisions', n: 'anticipation', k: 'comms',
+        h: 'stakeholders', u: 'resources', r: 'risk', b: 'rhythm',
+        p: 'passation', s: 'sitrep', o: 'opord', l: 'playbooks',
+        e: 'ccir', x: 'retex', z: 'exercises'
+      };
+      const target = map[e.key.toLowerCase()];
+      if (target) { setTab(target); e.preventDefault(); }
+      return;
+    }
+    if (e.key === 'g') {
+      pendingPrefix = 'g';
+      clearTimeout(pendingPrefixTimer);
+      pendingPrefixTimer = setTimeout(() => pendingPrefix = null, 1500);
+      return;
+    }
+
+    // Raccourcis directs
+    switch (e.key) {
+      case '?': $('#helpModal').classList.remove('hidden'); e.preventDefault(); break;
+      case 'l': quickAction('mel'); e.preventDefault(); break;
+      case 'a': quickAction('action'); e.preventDefault(); break;
+      case 'd': quickAction('decision'); e.preventDefault(); break;
+      case 'k': quickAction('comm'); e.preventDefault(); break;
+      case 'i': quickAction('incident'); e.preventDefault(); break;
+      case 's': setTab('sitrep'); e.preventDefault(); break;
+      case 'n': quickNewCurrentTab(); e.preventDefault(); break;
+    }
+  }
+  function quickNewCurrentTab() {
+    const map = {
+      incidents: 'incident', vessels: 'vessel', actions: 'action',
+      decisions: 'decision', comms: 'comm', stakeholders: 'stakeholder',
+      resources: 'resource', risk: 'risk', rhythm: 'rhythm',
+      team: 'team', passation: 'passation', anticipation: 'anticipation',
+      retex: 'retex', exercises: 'exercise', mel: 'mel'
+    };
+    const action = map[currentTab];
+    if (action) quickAction(action);
+    else toast('Pas de "nouveau" disponible sur cet onglet.', 'warn');
+  }
+  function quickAction(kind) {
+    if (kind === 'mel') return melForm();
+    if (kind === 'action') return actionForm();
+    if (kind === 'decision') return decisionForm();
+    if (kind === 'comm') return commsForm();
+    if (kind === 'incident') return incidentForm();
+    if (kind === 'vessel') return vesselForm();
+    if (kind === 'stakeholder') return stakeholderForm();
+    if (kind === 'resource') return resourceForm();
+    if (kind === 'risk') return riskForm();
+    if (kind === 'rhythm') return rhythmForm();
+    if (kind === 'team') return teamForm();
+    if (kind === 'passation') return passationForm();
+    if (kind === 'anticipation') return anticipationForm();
+    if (kind === 'retex') return retexForm();
+    if (kind === 'exercise') return exerciseForm();
+  }
+
+  // ============================================================
+  //   FAB
+  // ============================================================
+  function toggleFab(force) {
+    const menu = $('#fabMenu');
+    const main = $('#fabMain');
+    const open = (force === undefined) ? menu.hidden : force;
+    menu.hidden = !open;
+    main.classList.toggle('open', open);
+  }
+
+  // ============================================================
+  //   DATALISTS (auto-complétion)
+  // ============================================================
+  function refreshDatalists() {
+    const fill = (id, values) => {
+      const dl = document.getElementById(id);
+      if (!dl) return;
+      dl.innerHTML = '';
+      [...new Set(values.filter(Boolean))].sort().forEach(v => dl.appendChild(el('option', { value: v })));
+    };
+    fill('dl-authors', state.mel.map(m => m.author).concat(state.team.map(t => t.name)));
+    fill('dl-owners', state.actions.map(a => a.owner).concat(state.team.map(t => t.name)));
+    fill('dl-parties', state.stakeholders.map(s => s.name).concat(state.comms.map(c => c.party)));
+    fill('dl-vessels', state.vessels.map(v => v.name));
+  }
+
+  // ============================================================
+  //   ROUTING
+  // ============================================================
+  const renderers = {};
+  function setTab(tab) {
+    if (!renderers[tab]) tab = 'cop';
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    const main = $('#main');
+    main.innerHTML = '';
+    refreshDatalists();
+    renderers[tab](main);
+  }
+
+  // ============================================================
+  //   COP
   // ============================================================
   renderers.cop = (root) => {
     const activeIncidents = state.incidents.filter(i => i.status !== 'closed');
     const vesselsAtRisk = state.vessels.filter(v => v.status === 'incident' || v.status === 'risk');
     const overdue = state.actions.filter(a => a.status !== 'done' && a.due && new Date(a.due) < new Date()).length;
     const openActions = state.actions.filter(a => a.status !== 'done').length;
+    const phase = (window.CRISIS_PHASES.find(p => p.code === state.phase) || window.CRISIS_PHASES[0]);
+
+    root.appendChild(panel('Phase de cinétique de crise',
+      el('div', {},
+        el('div', { class: 'flex', style: 'gap:6px;margin-bottom:8px' },
+          ...window.CRISIS_PHASES.map(p =>
+            el('button', {
+              class: state.phase === p.code ? 'btn-primary btn-sm' : 'btn-ghost btn-sm',
+              onclick: () => { state.phase = p.code; logMEL('INFO', 'Phase passée à ' + p.label); save(); setTab('cop'); }
+            }, p.label)
+          )
+        ),
+        el('div', { class: 'muted' }, phase.desc),
+        state.phase === 'reflex' ? el('div', { class: 'auth-warn', style: 'margin-top:10px' },
+          '⚠ Phase RÉFLEXE — règle des 3R : RECULER (mise en sécurité), RENDRE COMPTE (alerte hiérarchie), RÉFLÉCHIR (analyse avant action). Décisions par procédure et délégation.'
+        ) : null
+      )
+    ));
 
     const kpis = el('div', { class: 'grid-4' },
       kpiTile('Niveau d\'alerte', state.alert.toUpperCase(),
-        state.alert === 'red' || state.alert === 'black' ? 'danger' :
-        state.alert === 'orange' ? 'warn' :
-        state.alert === 'yellow' ? 'warn' : 'ok'),
+        ['red','black'].includes(state.alert) ? 'danger' : ['orange','yellow'].includes(state.alert) ? 'warn' : 'ok'),
       kpiTile('Incidents actifs', activeIncidents.length, activeIncidents.length ? 'danger' : 'ok'),
       kpiTile('Navires impactés', vesselsAtRisk.length, vesselsAtRisk.length ? 'warn' : 'ok'),
-      kpiTile('Actions en retard', overdue, overdue ? 'danger' : (openActions ? 'warn' : 'ok'), `${openActions} actions ouvertes`)
+      kpiTile('Actions en retard', overdue, overdue ? 'danger' : (openActions ? 'warn' : 'ok'), `${openActions} ouvertes`)
     );
-
-    const ooda = el('div', { class: 'panel' },
-      el('div', { class: 'panel-header' }, el('h2', {}, 'Boucle OODA — Boyd')),
-      el('div', { class: 'panel-body' },
-        el('div', { class: 'ooda' },
-          oodaStep('1', 'Observe', 'Collecter données : navire, météo, autorités, COP'),
-          oodaStep('2', 'Orient', 'Analyser : METT-TC maritime, contexte, impacts'),
-          oodaStep('3', 'Decide', 'Choisir option, valider par Crisis Manager'),
-          oodaStep('4', 'Act', 'Exécuter, mesurer, reboucler')
-        )
-      )
-    );
-
-    const incidentsPanel = panel('Incidents actifs',
-      activeIncidents.length === 0
-        ? el('div', { class: 'empty' }, 'Aucun incident actif. Niveau de veille normale.')
-        : tableEl(['Réf', 'Type', 'Navire', 'Sévérité', 'Démarré', 'Statut'],
-          activeIncidents.map(i => [
-            el('span', { class: 'mono' }, i.ref || ''),
-            i.type || '',
-            i.vessel || '',
-            badge(i.severity, severityColor(i.severity)),
-            fmtTime(i.startedAt),
-            badge(i.status, i.status === 'open' ? 'red' : 'orange')
-          ])),
-      el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'Gérer →')
-    );
-
-    const vesselPanel = panel('Navires impactés',
-      vesselsAtRisk.length === 0
-        ? el('div', { class: 'empty' }, 'Aucun navire impacté.')
-        : tableEl(['Navire', 'IMO', 'Statut', 'Position'],
-          vesselsAtRisk.map(v => [
-            v.name, v.imo, vesselStatusBadge(v.status), v.position || '—'
-          ])),
-      el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('vessels') }, 'Voir flotte →')
-    );
-
-    const recentMEL = panel('Main Events Log — derniers événements',
-      state.mel.length === 0
-        ? el('div', { class: 'empty' }, 'Journal vide. Saisissez le premier événement.')
-        : el('div', {},
-            ...state.mel.slice(0, 10).map(e => el('div', { class: 'mel-entry' },
-              el('span', { class: 'mel-time' }, fmtDTG(e.ts)),
-              el('span', { class: 'mel-cat' }, badge(e.cat || 'INFO', 'blue')),
-              el('span', { class: 'mel-author' }, e.author),
-              el('span', { class: 'mel-text' }, e.text)
-            ))
-          ),
-      el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('mel') }, 'Voir tout →')
-    );
-
-    const ccirPreview = panel('CCIR — Commander\'s Critical Information Requirements',
-      el('div', { class: 'cards' },
-        ...state.ccir.map(c => el('div', { class: 'card' },
-          el('div', { class: 'card-title' }, `${c.type} — ${c.label}`),
-          el('div', { class: 'card-body' },
-            c.items && c.items.length
-              ? el('div', {}, ...c.items.map(it => el('div', { class: 'mono' }, '• ' + it)))
-              : el('span', { class: 'muted' }, 'Aucune information collectée pour ce besoin.')
-          )
-        ))
-      )
-    );
-
     root.appendChild(kpis);
-    root.appendChild(ooda);
-    root.appendChild(el('div', { class: 'grid-2' }, incidentsPanel, vesselPanel));
-    root.appendChild(recentMEL);
-    root.appendChild(ccirPreview);
+
+    // Quickbar — saisie MEL ultra-rapide
+    const qbCat = el('select', {}, ...['INFO','INC','DECISION','COMMS','ACTION','SAFETY','SECURITY','MEDIA','VESSEL','OTHER']
+      .map(c => el('option', { value: c }, c)));
+    const qbAuthor = el('input', { value: currentUserName(), placeholder: 'Auteur', list: 'dl-authors' });
+    const qbText = el('textarea', { placeholder: 'Saisie rapide d\'événement (Ctrl+Entrée pour envoyer)…' });
+    const qbBtn = el('button', { class: 'btn-primary', onclick: () => {
+      if (!qbText.value.trim()) return;
+      logMEL(qbCat.value, qbText.value.trim(), qbAuthor.value || currentUserName() || 'Anonyme');
+      qbText.value = '';
+      toast('Événement consigné', 'ok');
+      setTab('cop');
+    } }, '⏎ Log');
+    qbText.addEventListener('keydown', e => {
+      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); qbBtn.click(); }
+    });
+    root.appendChild(panel('Saisie rapide — Main Events Log',
+      el('div', { class: 'quickbar' },
+        qbCat, qbAuthor, qbText, qbBtn,
+        el('div', { class: 'qb-hint' }, 'Raccourci : touche L pour focus rapide. Ctrl+Entrée pour envoyer.')
+      )
+    ));
+
+    // OODA visuel
+    root.appendChild(panel('Boucle OODA — Boyd',
+      el('div', { class: 'ooda' },
+        oodaStep('1', 'Observe', 'Collecter : COP, navire, météo, autorités'),
+        oodaStep('2', 'Orient', 'Analyser : METT-TC maritime, contexte, options'),
+        oodaStep('3', 'Decide', 'Choisir option, intention claire'),
+        oodaStep('4', 'Act', 'Exécuter, mesurer, reboucler')
+      )
+    ));
+
+    root.appendChild(el('div', { class: 'grid-2' },
+      panel('Incidents actifs',
+        activeIncidents.length === 0
+          ? el('div', { class: 'empty' }, 'Aucun incident actif.')
+          : tableEl(['Réf', 'Type', 'Navire', 'Sév.', 'Démarré'],
+            activeIncidents.slice(0, 8).map(i => [
+              el('span', { class: 'mono' }, i.ref || ''),
+              i.type || '', i.vessel || '',
+              badge((i.ines != null ? 'INES ' + i.ines : (i.severity || '?').toUpperCase()), severityColor(i.severity)),
+              fmtTime(i.startedAt)
+            ])),
+        el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'Gérer →')
+      ),
+      panel('Anticipation prochaine — H+24',
+        (() => {
+          const horiz = state.anticipation.filter(a => a.horizon === '24H').slice(0, 3);
+          return horiz.length === 0
+            ? el('div', { class: 'empty' }, 'Aucune anticipation à H+24.')
+            : el('div', { class: 'cards' },
+                ...horiz.map(a => el('div', { class: 'card' },
+                  el('div', { class: 'card-title' }, '⏱ ' + a.horizon + ' · ' + (a.title || '')),
+                  el('div', { class: 'card-body' },
+                    el('div', {}, el('strong', { style: 'color:var(--ok)' }, '✓ Best : '), a.best || '—'),
+                    el('div', {}, el('strong', { style: 'color:var(--warn)' }, '◯ Likely : '), a.likely || '—'),
+                    el('div', {}, el('strong', { style: 'color:var(--danger)' }, '✗ Worst : '), a.worst || '—')
+                  )
+                ))
+              );
+        })(),
+        el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('anticipation') }, 'Cellule anticipation →')
+      )
+    ));
+
+    root.appendChild(panel('MEL — derniers événements',
+      state.mel.length === 0
+        ? el('div', { class: 'empty' }, 'Journal vide.')
+        : el('div', {}, ...state.mel.slice(0, 10).map(meEntry))
+    ));
   };
 
+  function meEntry(e) {
+    return el('div', { class: 'mel-entry' },
+      el('span', { class: 'mel-time' }, fmtDTG(e.ts)),
+      el('span', { class: 'mel-cat' }, badge(e.cat || 'INFO', 'blue')),
+      el('span', { class: 'mel-author' }, e.author),
+      el('span', { class: 'mel-text' }, e.text)
+    );
+  }
+
   // ============================================================
-  //  TAB : INCIDENTS
+  //   INCIDENTS
   // ============================================================
   renderers.incidents = (root) => {
     root.appendChild(panel('Incidents',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, `${state.incidents.length} incident(s) — ${state.incidents.filter(i => i.status !== 'closed').length} actif(s)`),
-          el('button', { class: 'btn-primary', onclick: () => incidentForm() }, '+ Nouvel incident')
+          el('div', { class: 'muted' }, `${state.incidents.length} total — ${state.incidents.filter(i => i.status !== 'closed').length} actif(s)`),
+          el('button', { class: 'btn-primary', onclick: () => incidentForm() }, '+ Nouvel incident (i)')
         ),
         state.incidents.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun incident enregistré.')
+          ? el('div', { class: 'empty' }, 'Aucun incident.')
           : tableEl(
-            ['Réf', 'Type', 'Navire', 'Sévérité', 'Démarré', 'Statut', 'Actions'],
+            ['Réf', 'Type', 'Navire', 'INES', 'ROE', 'Sévérité', 'Démarré', 'Statut', ''],
             state.incidents.map(i => [
               el('span', { class: 'mono' }, i.ref || ''),
               i.type || '',
               i.vessel || '',
+              i.ines != null ? badge(i.ines, i.ines >= 5 ? 'red' : i.ines >= 3 ? 'orange' : 'green') : '—',
+              i.roe ? badge('R' + i.roe, i.roe >= 4 ? 'red' : 'blue') : '—',
               badge(i.severity, severityColor(i.severity)),
               fmtTime(i.startedAt),
               badge(i.status, i.status === 'open' ? 'red' : i.status === 'monitoring' ? 'orange' : 'green'),
@@ -269,102 +704,104 @@
           )
       )
     ));
-  };
-
-  function incidentForm(idEdit) {
-    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open' };
-    const form = el('div', {});
-    const ref = el('input', { value: inc.ref || ('INC-' + Date.now().toString(36).toUpperCase()) });
-    const type = el('select', {},
-      ...['Piraterie','Incendie','Collision','Échouement','MOB','Médical','Cyber','Pollution','Sûreté','Cargaison','Mécanique','Autre']
-        .map(t => el('option', { value: t, selected: inc.type === t }, t))
-    );
-    const vessel = el('select', {},
-      el('option', { value: '' }, '— Aucun —'),
-      ...state.vessels.map(v => el('option', { value: v.name, selected: inc.vessel === v.name }, v.name))
-    );
-    const severity = el('select', {},
-      ...['low','med','high','crit'].map(s => el('option', { value: s, selected: inc.severity === s }, s.toUpperCase()))
-    );
-    const status = el('select', {},
-      ...['open','monitoring','closed'].map(s => el('option', { value: s, selected: inc.status === s }, s))
-    );
-    const startedAt = el('input', { type: 'datetime-local', value: inc.startedAt ? new Date(inc.startedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16) });
-    const summary = el('textarea', { placeholder: 'Résumé situation (5W : Who, What, Where, When, Why)' }, inc.summary || '');
-
-    form.appendChild(twoCol('Référence', ref, 'Type', type));
-    form.appendChild(twoCol('Navire', vessel, 'Sévérité', severity));
-    form.appendChild(twoCol('Statut', status, 'Date début', startedAt));
-    form.appendChild(field('Résumé', summary));
-    form.appendChild(el('div', { class: 'flex', style: 'margin-top:14px' },
-      el('button', { class: 'btn-primary', onclick: () => {
-        const data = {
-          id: inc.id || id(),
-          ref: ref.value, type: type.value, vessel: vessel.value,
-          severity: severity.value, status: status.value,
-          startedAt: new Date(startedAt.value).toISOString(),
-          summary: summary.value
-        };
-        if (idEdit) {
-          const idx = state.incidents.findIndex(i => i.id === idEdit);
-          state.incidents[idx] = data;
-          logMEL('INC', `Incident ${data.ref} mis à jour (${data.status})`);
-        } else {
-          state.incidents.push(data);
-          logMEL('INC', `Nouvel incident ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity})`);
-          if (data.severity === 'crit') state.alert = 'red';
-          else if (data.severity === 'high' && state.alert === 'green') state.alert = 'orange';
-          // Mettre à jour le navire impacté
-          if (data.vessel) {
-            const v = state.vessels.find(x => x.name === data.vessel);
-            if (v) v.status = 'incident';
-          }
-          applyAlertClass();
-        }
-        save();
-        closeModal();
-        setTab('incidents');
-      } }, idEdit ? 'Mettre à jour' : 'Créer'),
-      el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
+    // Échelle de gravité maritime
+    root.appendChild(panel('Échelle de gravité maritime (adaptée INES)',
+      tableEl(['Niveau', 'Label', 'Description'],
+        window.SEVERITY_SCALE.map(s => [
+          badge(s.level, s.level >= 5 ? 'red' : s.level >= 3 ? 'orange' : 'green'),
+          el('strong', {}, s.label),
+          s.desc
+        ]))
     ));
-    openModal(idEdit ? 'Modifier l\'incident' : 'Nouvel incident', form);
+  };
+  function incidentForm(idEdit) {
+    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', ines: 2 };
+    const ref = el('input', { value: inc.ref || ('INC-' + Date.now().toString(36).toUpperCase()) });
+    const type = el('select', {}, ...['Piraterie','Incendie','Collision','Échouement','MOB','Médical','Cyber','Pollution','Sûreté','Cargaison','Mécanique','Autre']
+      .map(t => el('option', { value: t, selected: inc.type === t }, t)));
+    const vessel = el('input', { list: 'dl-vessels', value: inc.vessel || '' });
+    const severity = el('select', {}, ...['low','med','high','crit'].map(s => el('option', { value: s, selected: inc.severity === s }, s.toUpperCase())));
+    const ines = el('select', {}, ...window.SEVERITY_SCALE.map(s => el('option', { value: s.level, selected: (inc.ines ?? 2) == s.level }, `${s.level} — ${s.label}`)));
+    const roe = el('select', {}, el('option', { value: '' }, '—'),
+      ...window.ROE_LEVELS.map(r => el('option', { value: r.level, selected: inc.roe == r.level }, `R${r.level} — ${r.label}`)));
+    const status = el('select', {}, ...['open','monitoring','closed'].map(s => el('option', { value: s, selected: inc.status === s }, s)));
+    const startedAt = el('input', { type: 'datetime-local', value: inc.startedAt ? new Date(inc.startedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16) });
+    const summary = el('textarea', { placeholder: '5W : Who, What, Where, When, Why' }, inc.summary || '');
+    const intent = el('textarea', { placeholder: 'Intention du Crisis Manager — résultat à atteindre, contraintes' }, inc.intent || '');
+    const endState = el('textarea', { placeholder: 'État final recherché (end-state) : indicateurs de fin de crise' }, inc.endState || '');
+
+    const submit = () => {
+      const data = {
+        id: inc.id || id(),
+        ref: ref.value, type: type.value, vessel: vessel.value,
+        severity: severity.value, ines: parseInt(ines.value, 10), roe: roe.value ? parseInt(roe.value, 10) : null,
+        status: status.value,
+        startedAt: new Date(startedAt.value).toISOString(),
+        summary: summary.value, intent: intent.value, endState: endState.value
+      };
+      if (idEdit) {
+        state.incidents[state.incidents.findIndex(i => i.id === idEdit)] = data;
+        logMEL('INC', `Incident ${data.ref} mis à jour (${data.status})`);
+      } else {
+        state.incidents.push(data);
+        logMEL('INC', `Nouvel incident ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity}, INES ${data.ines})`);
+        if (data.severity === 'crit' || data.ines >= 5) state.alert = 'red';
+        else if (data.severity === 'high' && state.alert === 'green') state.alert = 'orange';
+        if (data.vessel) {
+          const v = state.vessels.find(x => x.name === data.vessel);
+          if (v) v.status = 'incident';
+        }
+        applyAlertClass();
+      }
+      save(); closeModal(); setTab('incidents');
+    };
+
+    const form = el('div', {},
+      twoCol('Référence', ref, 'Type', type),
+      twoCol('Navire', vessel, 'Sévérité', severity),
+      twoCol('Niveau INES', ines, 'Niveau ROE', roe),
+      twoCol('Statut', status, 'Date début', startedAt),
+      field('Résumé (5W)', summary),
+      field('Intention du Crisis Manager', intent),
+      field('End-state (situation finale recherchée)', endState),
+      el('div', { class: 'flex', style: 'margin-top:14px' },
+        el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Mettre à jour' : 'Créer'),
+        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
+      )
+    );
+    openModal(idEdit ? 'Modifier incident' : 'Nouvel incident', form, { onSubmit: submit });
   }
   function deleteIncident(idDel) {
     if (!confirm('Supprimer cet incident ?')) return;
     const inc = state.incidents.find(i => i.id === idDel);
     state.incidents = state.incidents.filter(i => i.id !== idDel);
     logMEL('INC', `Incident ${inc?.ref} supprimé`);
-    save();
-    setTab('incidents');
+    save(); setTab('incidents');
   }
 
   // ============================================================
-  //  TAB : VESSELS
+  //   VESSELS
   // ============================================================
   renderers.vessels = (root) => {
-    root.appendChild(panel('Flotte — état des navires',
+    root.appendChild(panel('Flotte',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, `${state.vessels.length} navire(s) suivi(s)`),
-          el('button', { class: 'btn-primary', onclick: () => vesselForm() }, '+ Ajouter un navire')
+          el('div', { class: 'muted' }, `${state.vessels.length} navire(s)`),
+          el('button', { class: 'btn-primary', onclick: () => vesselForm() }, '+ Ajouter (n)')
         ),
         state.vessels.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun navire enregistré.')
-          : tableEl(
-            ['Navire', 'IMO', 'Type', 'Statut', 'Position', 'Notes', 'Actions'],
+          ? el('div', { class: 'empty' }, 'Aucun navire.')
+          : tableEl(['Navire', 'IMO', 'Type', 'Statut', 'Position', 'Notes', ''],
             state.vessels.map(v => [
               el('span', { class: 'mono' }, v.name),
-              v.imo || '—',
-              v.type || '',
+              v.imo || '—', v.type || '',
               vesselStatusBadge(v.status),
-              v.position || '—',
-              v.notes || '',
+              v.position || '—', v.notes || '',
               el('div', { class: 'flex' },
                 el('button', { class: 'btn-ghost btn-sm', onclick: () => vesselForm(v.id) }, 'Éditer'),
                 el('button', { class: 'btn-danger btn-sm', onclick: () => deleteVessel(v.id) }, '✕')
               )
-            ])
-          )
+            ]))
       )
     ));
   };
@@ -373,137 +810,94 @@
     const name = el('input', { value: v.name || '' });
     const imo = el('input', { value: v.imo || '' });
     const type = el('input', { value: v.type || '', placeholder: 'ULCV, NEO Panamax, RoRo, LNG…' });
-    const status = el('select', {},
-      ...[
-        ['normal', 'Normal'],
-        ['risk', 'À risque'],
-        ['incident', 'Incident'],
-        ['safe', 'Mise en sécurité'],
-        ['port', 'Au port refuge']
-      ].map(([k, lbl]) => el('option', { value: k, selected: v.status === k }, lbl))
-    );
-    const position = el('input', { value: v.position || '', placeholder: 'Lat / Long ou nom de zone' });
+    const status = el('select', {}, ...[['normal','Normal'],['risk','À risque'],['incident','Incident'],['safe','Mise en sécurité'],['port','Port refuge']]
+      .map(([k, l]) => el('option', { value: k, selected: v.status === k }, l)));
+    const position = el('input', { value: v.position || '' });
     const notes = el('textarea', {}, v.notes || '');
-
-    const form = el('div', {},
-      twoCol('Navire', name, 'IMO', imo),
-      twoCol('Type', type, 'Statut', status),
-      field('Position', position),
-      field('Notes', notes),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          const data = {
-            id: v.id || id(),
-            name: name.value, imo: imo.value, type: type.value,
-            status: status.value, position: position.value, notes: notes.value
-          };
-          if (idEdit) {
-            const idx = state.vessels.findIndex(x => x.id === idEdit);
-            state.vessels[idx] = data;
-            logMEL('VESSEL', `Navire ${data.name} mis à jour — statut ${data.status}`);
-          } else {
-            state.vessels.push(data);
-            logMEL('VESSEL', `Navire ${data.name} ajouté à la flotte`);
-          }
-          save();
-          closeModal();
-          setTab('vessels');
-        } }, idEdit ? 'Mettre à jour' : 'Créer'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal(idEdit ? 'Modifier navire' : 'Nouveau navire', form);
+    const submit = () => {
+      const data = { id: v.id || id(), name: name.value, imo: imo.value, type: type.value, status: status.value, position: position.value, notes: notes.value };
+      if (idEdit) state.vessels[state.vessels.findIndex(x => x.id === idEdit)] = data;
+      else { state.vessels.push(data); logMEL('VESSEL', `Navire ${data.name} ajouté`); }
+      save(); closeModal(); setTab('vessels');
+    };
+    openModal(idEdit ? 'Modifier navire' : 'Nouveau navire',
+      el('div', {},
+        twoCol('Nom', name, 'IMO', imo),
+        twoCol('Type', type, 'Statut', status),
+        field('Position', position),
+        field('Notes', notes),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Mettre à jour' : 'Créer'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
+        )
+      ), { onSubmit: submit });
   }
-  function deleteVessel(idDel) {
-    if (!confirm('Retirer ce navire ?')) return;
-    state.vessels = state.vessels.filter(v => v.id !== idDel);
-    save();
-    setTab('vessels');
-  }
+  function deleteVessel(idDel) { if (confirm('Retirer ?')) { state.vessels = state.vessels.filter(v => v.id !== idDel); save(); setTab('vessels'); } }
 
   // ============================================================
-  //  TAB : MEL — Main Events Log
+  //   MEL
   // ============================================================
   renderers.mel = (root) => {
-    const cat = el('select', {},
-      ...['INFO','INC','DECISION','COMMS','ACTION','SAFETY','SECURITY','MEDIA','VESSEL','OTHER']
-        .map(c => el('option', { value: c }, c))
-    );
-    const author = el('input', { placeholder: 'Auteur / poste (ex. CMD, OPS)' });
-    const text = el('textarea', { placeholder: 'Saisir l\'événement, fait observable, horodaté à la création.' });
-    const addBtn = el('button', { class: 'btn-primary', onclick: () => {
+    const cat = el('select', {}, ...['INFO','INC','DECISION','COMMS','ACTION','SAFETY','SECURITY','MEDIA','VESSEL','OTHER']
+      .map(c => el('option', { value: c }, c)));
+    const author = el('input', { value: currentUserName(), list: 'dl-authors' });
+    const text = el('textarea', { placeholder: 'Événement (Ctrl+Entrée pour envoyer)' });
+    const submit = () => {
       if (!text.value.trim()) return;
-      logMEL(cat.value, text.value.trim(), author.value || 'Anonyme');
+      logMEL(cat.value, text.value.trim(), author.value || currentUserName() || 'Anonyme');
       text.value = '';
       setTab('mel');
-    } }, '+ Consigner');
-
-    const inputPanel = panel('Saisie d\'événement',
+    };
+    text.addEventListener('keydown', e => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); submit(); } });
+    root.appendChild(panel('Saisir un événement',
       el('div', {},
         twoCol('Catégorie', cat, 'Auteur', author),
         field('Événement', text),
-        el('div', { style: 'margin-top:8px' }, addBtn,
-          el('span', { class: 'muted', style: 'margin-left:10px' }, 'Le journal est immuable : toute saisie est horodatée et conservée.')
-        )
+        el('button', { class: 'btn-primary', onclick: submit }, '+ Consigner')
       )
-    );
-
-    const filterCat = el('select', { onchange: () => setTab('mel') },
-      el('option', { value: '' }, 'Toutes catégories'),
-      ...['INFO','INC','DECISION','COMMS','ACTION','SAFETY','SECURITY','MEDIA','VESSEL','OTHER']
-        .map(c => el('option', { value: c }, c))
-    );
-
-    const filtered = state.mel;
-
-    const logPanel = panel('Journal chronologique',
-      filtered.length === 0
-        ? el('div', { class: 'empty' }, 'Aucune entrée. Le journal s\'affichera ici.')
-        : el('div', {}, ...filtered.map(e => el('div', { class: 'mel-entry' },
-            el('span', { class: 'mel-time' }, fmtDTG(e.ts)),
-            el('span', { class: 'mel-cat' }, badge(e.cat || 'INFO', 'blue')),
-            el('span', { class: 'mel-author' }, e.author),
-            el('span', { class: 'mel-text' }, e.text)
-          ))),
-      el('button', { class: 'btn-ghost btn-sm', onclick: () => exportMEL() }, '⬇ Export texte')
-    );
-
-    root.appendChild(inputPanel);
-    root.appendChild(logPanel);
+    ));
+    root.appendChild(panel('Journal MEL',
+      state.mel.length === 0
+        ? el('div', { class: 'empty' }, 'Vide.')
+        : el('div', {}, ...state.mel.map(meEntry)),
+      el('button', { class: 'btn-ghost btn-sm', onclick: exportMEL }, '⬇ Export texte')
+    ));
   };
+  function melForm() {
+    setTab('mel');
+    setTimeout(() => {
+      const ta = $('#main textarea');
+      if (ta) ta.focus();
+    }, 50);
+  }
   function exportMEL() {
     const lines = ['MAIN EVENTS LOG — CMA Ships Crisis Cell', '='.repeat(60), ''];
-    [...state.mel].reverse().forEach(e => {
-      lines.push(`[${fmtDTG(e.ts)}] [${e.cat}] (${e.author}) ${e.text}`);
-    });
+    [...state.mel].reverse().forEach(e => lines.push(`[${fmtDTG(e.ts)}] [${e.cat}] (${e.author}) ${e.text}`));
     download(`MEL_${Date.now()}.txt`, lines.join('\n'));
   }
 
   // ============================================================
-  //  TAB : TEAM
+  //   TEAM
   // ============================================================
   renderers.team = (root) => {
-    root.appendChild(panel('Cellule de crise — rôles ICS adaptés',
+    root.appendChild(panel('Cellule de crise',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Inspiré du Incident Command System (ICS) et organisation maritime DPA/CSO'),
-          el('button', { class: 'btn-primary', onclick: () => teamForm() }, '+ Ajouter un membre')
+          el('div', { class: 'muted' }, 'Rôles ICS adaptés maritime — DPA, CSO, ANT (Anticipation), WRT (Watch)'),
+          el('button', { class: 'btn-primary', onclick: () => teamForm() }, '+ Ajouter')
         ),
         state.team.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun membre. Ajoutez les personnels d\'astreinte.')
-          : tableEl(['Rôle', 'Nom', 'Contact', 'Astreinte', 'Statut', 'Actions'],
+          ? el('div', { class: 'empty' }, 'Vide.')
+          : tableEl(['Rôle', 'Nom', 'Contact', 'Astreinte', 'Statut', ''],
             state.team.map(t => [
               el('span', {}, badge(t.role, 'blue'), ' ', roleName(t.role)),
-              t.name,
-              t.contact,
-              t.shift || '',
+              t.name, t.contact, t.shift || '',
               badge(t.online ? 'En ligne' : 'Off', t.online ? 'green' : 'grey'),
               el('div', { class: 'flex' },
                 el('button', { class: 'btn-ghost btn-sm', onclick: () => teamForm(t.id) }, 'Éditer'),
-                el('button', { class: 'btn-danger btn-sm', onclick: () => deleteMember(t.id) }, '✕')
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Retirer ?')) { state.team = state.team.filter(x => x.id !== t.id); save(); setTab('team'); } } }, '✕')
               )
-            ])
-          )
+            ]))
       )
     ));
     root.appendChild(panel('Référentiel des rôles',
@@ -511,330 +905,311 @@
         ...window.ROLES.map(r => el('div', { class: 'card' },
           el('div', { class: 'card-title' }, `[${r.code}] ${r.name}`),
           el('div', { class: 'card-body muted' }, r.desc)
-        ))
-      )
+        )))
     ));
   };
-  function roleName(code) {
-    const r = window.ROLES.find(x => x.code === code);
-    return r ? r.name : code;
-  }
+  function roleName(code) { const r = window.ROLES.find(x => x.code === code); return r ? r.name : code; }
   function teamForm(idEdit) {
     const m = idEdit ? state.team.find(x => x.id === idEdit) : { role: 'CMD', online: true };
-    const role = el('select', {},
-      ...window.ROLES.map(r => el('option', { value: r.code, selected: m.role === r.code }, `[${r.code}] ${r.name}`))
-    );
+    const role = el('select', {}, ...window.ROLES.map(r => el('option', { value: r.code, selected: m.role === r.code }, `[${r.code}] ${r.name}`)));
     const name = el('input', { value: m.name || '' });
-    const contact = el('input', { value: m.contact || '', placeholder: 'Tel / mail / radio' });
+    const contact = el('input', { value: m.contact || '' });
     const shift = el('input', { value: m.shift || '', placeholder: 'Jour / Nuit / 24x7' });
-    const online = el('input', { type: 'checkbox' });
-    online.checked = !!m.online;
-    const form = el('div', {},
-      twoCol('Rôle', role, 'Nom', name),
-      twoCol('Contact', contact, 'Astreinte', shift),
-      el('label', { class: 'flex', style: 'margin-top:6px' }, online, el('span', { style: 'margin-left:6px' }, 'En ligne / mobilisé')),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          const data = {
-            id: m.id || id(),
-            role: role.value, name: name.value, contact: contact.value,
-            shift: shift.value, online: online.checked
-          };
-          if (idEdit) {
-            const idx = state.team.findIndex(x => x.id === idEdit);
-            state.team[idx] = data;
-          } else {
-            state.team.push(data);
-            logMEL('INFO', `Cellule activée : ${data.name} en ${data.role}`);
-          }
-          save();
-          closeModal();
-          setTab('team');
-        } }, idEdit ? 'Mettre à jour' : 'Ajouter'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal(idEdit ? 'Modifier membre' : 'Nouveau membre cellule', form);
-  }
-  function deleteMember(idDel) {
-    if (!confirm('Retirer ce membre ?')) return;
-    state.team = state.team.filter(t => t.id !== idDel);
-    save();
-    setTab('team');
+    const online = el('input', { type: 'checkbox' }); online.checked = !!m.online;
+    const submit = () => {
+      const data = { id: m.id || id(), role: role.value, name: name.value, contact: contact.value, shift: shift.value, online: online.checked };
+      if (idEdit) state.team[state.team.findIndex(x => x.id === idEdit)] = data;
+      else { state.team.push(data); logMEL('INFO', `${data.name} en ${data.role}`); }
+      save(); closeModal(); setTab('team');
+    };
+    openModal(idEdit ? 'Éditer membre' : 'Nouveau membre',
+      el('div', {},
+        twoCol('Rôle', role, 'Nom', name),
+        twoCol('Contact', contact, 'Astreinte', shift),
+        el('label', { class: 'flex', style: 'margin-top:6px' }, online, el('span', { style: 'margin-left:6px' }, 'En ligne / mobilisé')),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
+        )
+      ), { onSubmit: submit });
   }
 
   // ============================================================
-  //  TAB : ACTIONS
+  //   ACTIONS
   // ============================================================
   renderers.actions = (root) => {
     const open = state.actions.filter(a => a.status !== 'done');
     const done = state.actions.filter(a => a.status === 'done');
-
-    root.appendChild(panel('Actions à mener',
+    root.appendChild(panel('Actions',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
           el('div', { class: 'muted' }, `${open.length} ouverte(s) — ${done.length} clôturée(s)`),
-          el('button', { class: 'btn-primary', onclick: () => actionForm() }, '+ Nouvelle action')
+          el('button', { class: 'btn-primary', onclick: () => actionForm() }, '+ Action (a)')
         ),
-        open.length === 0
-          ? el('div', { class: 'empty' }, 'Aucune action ouverte.')
-          : tableEl(['Priorité', 'Description', 'Owner', 'Échéance', 'Statut', ''],
-            open.map(a => actionRow(a)))
+        open.length === 0 ? el('div', { class: 'empty' }, 'Aucune action.')
+          : tableEl(['Pri.', 'Description', 'Owner', 'Échéance', 'Statut', ''], open.map(actionRow))
       )
     ));
-
-    if (done.length) {
-      root.appendChild(panel('Clôturées',
-        tableEl(['Priorité', 'Description', 'Owner', 'Échéance', 'Statut', ''], done.map(a => actionRow(a)))
-      ));
-    }
+    if (done.length) root.appendChild(panel('Clôturées',
+      tableEl(['Pri.', 'Description', 'Owner', 'Échéance', 'Statut', ''], done.map(actionRow))));
   };
   function actionRow(a) {
     const overdue = a.due && new Date(a.due) < new Date() && a.status !== 'done';
     return [
       badge(a.priority || 'P3', a.priority === 'P1' ? 'red' : a.priority === 'P2' ? 'orange' : 'blue'),
-      a.text,
-      a.owner || '—',
+      a.text, a.owner || '—',
       el('span', { class: overdue ? 'badge red' : '' }, fmtTime(a.due)),
-      badge(a.status, a.status === 'done' ? 'green' : a.status === 'in-progress' ? 'orange' : 'blue'),
+      el('span', { class: 'editable', onclick: () => cycleActionStatus(a.id) }, badge(a.status, a.status === 'done' ? 'green' : a.status === 'in-progress' ? 'orange' : 'blue')),
       el('div', { class: 'flex' },
         el('button', { class: 'btn-ghost btn-sm', onclick: () => actionForm(a.id) }, 'Éditer'),
-        a.status !== 'done'
-          ? el('button', { class: 'btn-success btn-sm', onclick: () => closeAction(a.id) }, '✓')
-          : null,
-        el('button', { class: 'btn-danger btn-sm', onclick: () => deleteAction(a.id) }, '✕')
+        a.status !== 'done' ? el('button', { class: 'btn-success btn-sm', onclick: () => closeAction(a.id) }, '✓') : null,
+        el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.actions = state.actions.filter(x => x.id !== a.id); save(); setTab('actions'); } } }, '✕')
       )
     ];
   }
+  function cycleActionStatus(idAct) {
+    const a = state.actions.find(x => x.id === idAct);
+    if (!a) return;
+    const order = ['todo', 'in-progress', 'blocked', 'done'];
+    a.status = order[(order.indexOf(a.status) + 1) % order.length];
+    if (a.status === 'done') a.closedAt = nowISO();
+    save(); setTab('actions');
+  }
   function actionForm(idEdit) {
     const a = idEdit ? state.actions.find(x => x.id === idEdit) : { priority: 'P2', status: 'todo' };
-    const priority = el('select', {},
-      ...['P1','P2','P3'].map(p => el('option', { value: p, selected: a.priority === p }, p))
-    );
-    const status = el('select', {},
-      ...[['todo','À faire'],['in-progress','En cours'],['blocked','Bloquée'],['done','Faite']]
-        .map(([k, lbl]) => el('option', { value: k, selected: a.status === k }, lbl))
-    );
+    const priority = el('select', {}, ...['P1','P2','P3'].map(p => el('option', { value: p, selected: a.priority === p }, p)));
+    const status = el('select', {}, ...[['todo','À faire'],['in-progress','En cours'],['blocked','Bloquée'],['done','Faite']]
+      .map(([k, l]) => el('option', { value: k, selected: a.status === k }, l)));
     const text = el('textarea', { placeholder: 'Action concrète, mesurable, attribuable' }, a.text || '');
-    const owner = el('input', { value: a.owner || '', placeholder: 'CMD / OPS / nom' });
+    const owner = el('input', { value: a.owner || currentUserName(), list: 'dl-owners' });
     const due = el('input', { type: 'datetime-local', value: a.due ? new Date(a.due).toISOString().slice(0, 16) : '' });
-    const form = el('div', {},
-      field('Description', text),
-      twoCol('Owner', owner, 'Échéance', due),
-      twoCol('Priorité', priority, 'Statut', status),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          const data = {
-            id: a.id || id(),
-            text: text.value, owner: owner.value, due: due.value ? new Date(due.value).toISOString() : '',
-            priority: priority.value, status: status.value,
-            createdAt: a.createdAt || nowISO()
-          };
-          if (idEdit) {
-            const idx = state.actions.findIndex(x => x.id === idEdit);
-            state.actions[idx] = data;
-          } else {
-            state.actions.push(data);
-            logMEL('ACTION', `Action ouverte : ${data.text} (${data.priority}, owner ${data.owner})`);
-          }
-          save();
-          closeModal();
-          setTab('actions');
-        } }, idEdit ? 'Mettre à jour' : 'Créer'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal(idEdit ? 'Modifier action' : 'Nouvelle action', form);
+    const submit = () => {
+      const data = { id: a.id || id(), text: text.value, owner: owner.value,
+        due: due.value ? new Date(due.value).toISOString() : '',
+        priority: priority.value, status: status.value, createdAt: a.createdAt || nowISO() };
+      if (idEdit) state.actions[state.actions.findIndex(x => x.id === idEdit)] = data;
+      else { state.actions.push(data); logMEL('ACTION', `Action : ${data.text} (${data.priority})`); }
+      save(); closeModal(); setTab('actions');
+    };
+    openModal(idEdit ? 'Éditer action' : 'Nouvelle action',
+      el('div', {},
+        field('Description', text),
+        twoCol('Owner', owner, 'Échéance', due),
+        twoCol('Priorité', priority, 'Statut', status),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
+        )
+      ), { onSubmit: submit });
   }
   function closeAction(idDel) {
     const a = state.actions.find(x => x.id === idDel);
-    a.status = 'done';
-    a.closedAt = nowISO();
-    logMEL('ACTION', `Action clôturée : ${a.text}`);
-    save();
-    setTab('actions');
-  }
-  function deleteAction(idDel) {
-    if (!confirm('Supprimer ?')) return;
-    state.actions = state.actions.filter(a => a.id !== idDel);
-    save();
-    setTab('actions');
+    a.status = 'done'; a.closedAt = nowISO();
+    logMEL('ACTION', `Clôturée : ${a.text}`);
+    save(); setTab('actions');
   }
 
   // ============================================================
-  //  TAB : DECISIONS — OODA
+  //   DECISIONS — OODA
   // ============================================================
   renderers.decisions = (root) => {
-    root.appendChild(panel('Journal des décisions — boucle OODA',
+    root.appendChild(panel('Décisions — boucle OODA',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Chaque décision est tracée avec ses 4 phases : Observe / Orient / Decide / Act'),
-          el('button', { class: 'btn-primary', onclick: () => decisionForm() }, '+ Nouvelle décision')
+          el('div', { class: 'muted' }, 'Trace OODA : Observe / Orient / Decide / Act + intention.'),
+          el('button', { class: 'btn-primary', onclick: () => decisionForm() }, '+ Décision (d)')
         ),
-        state.decisions.length === 0
-          ? el('div', { class: 'empty' }, 'Aucune décision tracée.')
-          : el('div', { class: 'cards' },
-              ...state.decisions.map(d => el('div', { class: 'card' },
-                el('div', { class: 'flex-between' },
-                  el('div', { class: 'card-title' }, d.title),
-                  el('div', {},
-                    badge(d.status || 'pending', d.status === 'executed' ? 'green' : d.status === 'rejected' ? 'red' : 'orange'),
-                    ' ',
-                    el('span', { class: 'mono', style: 'color:var(--muted)' }, fmtDTG(d.ts))
-                  )
-                ),
-                el('div', { class: 'card-meta' }, `Décideur : ${d.decider || '—'}`),
-                el('div', { class: 'card-body' },
-                  el('div', {}, el('strong', {}, '👁 Observe : '), d.observe || '—'),
-                  el('div', {}, el('strong', {}, '🧭 Orient : '), d.orient || '—'),
-                  el('div', {}, el('strong', {}, '⚖ Decide : '), d.decide || '—'),
-                  el('div', {}, el('strong', {}, '⚡ Act : '), d.act || '—')
-                ),
-                el('div', { class: 'card-actions' },
-                  el('button', { class: 'btn-ghost btn-sm', onclick: () => decisionForm(d.id) }, 'Éditer'),
-                  el('button', { class: 'btn-danger btn-sm', onclick: () => deleteDecision(d.id) }, '✕')
-                )
-              ))
-            )
+        state.decisions.length === 0 ? el('div', { class: 'empty' }, 'Aucune décision.')
+          : el('div', { class: 'cards' }, ...state.decisions.map(d =>
+            el('div', { class: 'card' },
+              el('div', { class: 'flex-between' },
+                el('div', { class: 'card-title' }, d.title),
+                el('div', {}, badge(d.status, d.status === 'executed' ? 'green' : d.status === 'rejected' ? 'red' : 'orange'),
+                  ' ', el('span', { class: 'mono', style: 'color:var(--muted)' }, fmtDTG(d.ts)))),
+              el('div', { class: 'card-meta' }, `Décideur : ${d.decider || '—'}`),
+              el('div', { class: 'card-body' },
+                el('div', {}, el('strong', {}, '👁 Observe : '), d.observe || '—'),
+                el('div', {}, el('strong', {}, '🧭 Orient : '), d.orient || '—'),
+                el('div', {}, el('strong', {}, '⚖ Decide : '), d.decide || '—'),
+                el('div', {}, el('strong', {}, '⚡ Act : '), d.act || '—')),
+              el('div', { class: 'card-actions' },
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => decisionForm(d.id) }, 'Éditer'),
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.decisions = state.decisions.filter(x => x.id !== d.id); save(); setTab('decisions'); } } }, '✕')
+              ))))
       )
     ));
   };
   function decisionForm(idEdit) {
     const d = idEdit ? state.decisions.find(x => x.id === idEdit) : { status: 'pending' };
-    const title = el('input', { value: d.title || '', placeholder: 'Titre court de la décision' });
-    const decider = el('input', { value: d.decider || '', placeholder: 'Crisis Manager / DPA…' });
-    const observe = el('textarea', { placeholder: 'Faits observés, sources, COP' }, d.observe || '');
-    const orient = el('textarea', { placeholder: 'Analyse, contexte, options possibles, contraintes' }, d.orient || '');
+    const title = el('input', { value: d.title || '' });
+    const decider = el('input', { value: d.decider || currentUserName() });
+    const observe = el('textarea', { placeholder: 'Faits, sources, COP' }, d.observe || '');
+    const orient = el('textarea', { placeholder: 'Analyse, options, contraintes' }, d.orient || '');
     const decide = el('textarea', { placeholder: 'Option retenue + justification' }, d.decide || '');
-    const act = el('textarea', { placeholder: 'Plan d\'action, qui, quoi, quand' }, d.act || '');
-    const status = el('select', {},
-      ...[['pending','En attente'],['executed','Exécutée'],['rejected','Rejetée']]
-        .map(([k, lbl]) => el('option', { value: k, selected: d.status === k }, lbl))
-    );
-    const form = el('div', {},
-      twoCol('Titre', title, 'Décideur', decider),
-      field('Observe', observe),
-      field('Orient', orient),
-      field('Decide', decide),
-      field('Act', act),
-      field('Statut', status),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          const data = {
-            id: d.id || id(),
-            title: title.value, decider: decider.value,
-            observe: observe.value, orient: orient.value,
-            decide: decide.value, act: act.value,
-            status: status.value, ts: d.ts || nowISO()
-          };
-          if (idEdit) {
-            const idx = state.decisions.findIndex(x => x.id === idEdit);
-            state.decisions[idx] = data;
-          } else {
-            state.decisions.unshift(data);
-            logMEL('DECISION', `Décision : ${data.title} (${data.status}) — par ${data.decider}`);
-          }
-          save();
-          closeModal();
-          setTab('decisions');
-        } }, idEdit ? 'Mettre à jour' : 'Tracer'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal(idEdit ? 'Modifier décision' : 'Nouvelle décision OODA', form);
-  }
-  function deleteDecision(idDel) {
-    if (!confirm('Supprimer ?')) return;
-    state.decisions = state.decisions.filter(d => d.id !== idDel);
-    save();
-    setTab('decisions');
+    const act = el('textarea', { placeholder: 'Plan, qui, quoi, quand' }, d.act || '');
+    const status = el('select', {}, ...[['pending','Attente'],['executed','Exécutée'],['rejected','Rejetée']]
+      .map(([k, l]) => el('option', { value: k, selected: d.status === k }, l)));
+    const submit = () => {
+      const data = { id: d.id || id(), title: title.value, decider: decider.value,
+        observe: observe.value, orient: orient.value, decide: decide.value, act: act.value,
+        status: status.value, ts: d.ts || nowISO() };
+      if (idEdit) state.decisions[state.decisions.findIndex(x => x.id === idEdit)] = data;
+      else { state.decisions.unshift(data); logMEL('DECISION', `Décision : ${data.title} (${data.status})`); }
+      save(); closeModal(); setTab('decisions');
+    };
+    openModal(idEdit ? 'Éditer décision' : 'Nouvelle décision',
+      el('div', {},
+        twoCol('Titre', title, 'Décideur', decider),
+        field('👁 Observe', observe), field('🧭 Orient', orient),
+        field('⚖ Decide', decide), field('⚡ Act', act),
+        field('Statut', status),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Tracer'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
   }
 
   // ============================================================
-  //  TAB : COMMS
+  //   ANTICIPATION — H+6 / H+24 / H+72 (REX nucléaire)
+  // ============================================================
+  renderers.anticipation = (root) => {
+    root.appendChild(panel('Cellule Anticipation — prospective',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Modèle EDF/ASN : la cellule anticipation produit des scénarios best/likely/worst à H+6, H+24, H+72, séparée de l\'action immédiate. Permet d\'éviter le tunnel et préparer les décisions à venir.'),
+        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
+          el('div', { class: 'muted' }, `${state.anticipation.length} scénario(s)`),
+          el('button', { class: 'btn-primary', onclick: () => anticipationForm() }, '+ Scénario')
+        ),
+        state.anticipation.length === 0 ? el('div', { class: 'empty' }, 'Aucun scénario.')
+          : el('div', { class: 'cards' }, ...['6H','24H','72H'].flatMap(h => {
+              const items = state.anticipation.filter(a => a.horizon === h);
+              if (!items.length) return [];
+              return [
+                el('h4', { style: 'margin:8px 0 4px;color:var(--accent-2)' }, 'Horizon ' + h),
+                ...items.map(a => el('div', { class: 'card' },
+                  el('div', { class: 'card-title' }, a.title || '(sans titre)'),
+                  el('div', { class: 'card-meta' }, `Owner : ${a.owner || '—'} · ${fmtDTG(a.ts)}`),
+                  el('div', { class: 'card-body' },
+                    el('div', {}, el('strong', { style: 'color:var(--ok)' }, '✓ Best case : '), a.best || '—'),
+                    el('div', {}, el('strong', { style: 'color:var(--warn)' }, '◯ Likely : '), a.likely || '—'),
+                    el('div', {}, el('strong', { style: 'color:var(--danger)' }, '✗ Worst case : '), a.worst || '—'),
+                    a.signals ? el('div', { style: 'margin-top:6px' }, el('strong', {}, 'Signaux à surveiller : '), a.signals) : null
+                  ),
+                  el('div', { class: 'card-actions' },
+                    el('button', { class: 'btn-ghost btn-sm', onclick: () => anticipationForm(a.id) }, 'Éditer'),
+                    el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.anticipation = state.anticipation.filter(x => x.id !== a.id); save(); setTab('anticipation'); } } }, '✕')
+                  )))
+              ];
+            }))
+      )
+    ));
+  };
+  function anticipationForm(idEdit) {
+    const a = idEdit ? state.anticipation.find(x => x.id === idEdit) : { horizon: '24H' };
+    const horizon = el('select', {}, ...['6H','24H','72H'].map(h => el('option', { value: h, selected: a.horizon === h }, 'H+' + h)));
+    const title = el('input', { value: a.title || '' });
+    const owner = el('input', { value: a.owner || currentUserName(), list: 'dl-owners' });
+    const best = el('textarea', { placeholder: 'Scénario favorable' }, a.best || '');
+    const likely = el('textarea', { placeholder: 'Scénario probable' }, a.likely || '');
+    const worst = el('textarea', { placeholder: 'Scénario défavorable' }, a.worst || '');
+    const signals = el('textarea', { placeholder: 'Signaux faibles / forts à surveiller (déclencheurs de bascule)' }, a.signals || '');
+    const submit = () => {
+      const data = { id: a.id || id(), horizon: horizon.value, title: title.value, owner: owner.value,
+        best: best.value, likely: likely.value, worst: worst.value, signals: signals.value, ts: a.ts || nowISO() };
+      if (idEdit) state.anticipation[state.anticipation.findIndex(x => x.id === idEdit)] = data;
+      else { state.anticipation.push(data); logMEL('INFO', `Anticipation H+${data.horizon} : ${data.title}`); }
+      save(); closeModal(); setTab('anticipation');
+    };
+    openModal(idEdit ? 'Éditer scénario' : 'Nouveau scénario',
+      el('div', {},
+        twoCol('Horizon', horizon, 'Owner', owner),
+        field('Titre', title),
+        field('✓ Best case', best),
+        field('◯ Likely', likely),
+        field('✗ Worst case', worst),
+        field('Signaux à surveiller', signals),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
+        )
+      ), { onSubmit: submit });
+  }
+
+  // ============================================================
+  //   COMMS
   // ============================================================
   renderers.comms = (root) => {
-    root.appendChild(panel('Journal des communications',
+    root.appendChild(panel('Communications',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Tracer toutes communications entrantes/sortantes — vital pour audit et juridique'),
-          el('button', { class: 'btn-primary', onclick: () => commsForm() }, '+ Enregistrer comm')
+          el('div', { class: 'muted' }, 'Single voice principle (REX EDF/Marine) — toute comm externe validée par le CMD.'),
+          el('button', { class: 'btn-primary', onclick: () => commsForm() }, '+ Comm (k)')
         ),
-        state.comms.length === 0
-          ? el('div', { class: 'empty' }, 'Aucune communication tracée.')
-          : tableEl(['Sens', 'DTG', 'Canal', 'De / À', 'Sujet', 'Contenu', ''],
+        state.comms.length === 0 ? el('div', { class: 'empty' }, 'Aucune comm.')
+          : tableEl(['Sens', 'DTG', 'Canal', 'De/À', 'Sujet', 'Validation', 'Contenu', ''],
             state.comms.map(c => [
               badge(c.dir === 'in' ? '⇓ IN' : '⇑ OUT', c.dir === 'in' ? 'blue' : 'orange'),
               el('span', { class: 'mono' }, fmtDTG(c.ts)),
-              c.channel || '',
-              c.party || '',
-              c.subject || '',
-              el('div', { style: 'white-space:pre-wrap;font-size:12px' }, c.body || ''),
-              el('button', { class: 'btn-danger btn-sm', onclick: () => deleteComm(c.id) }, '✕')
-            ])
-          )
+              c.channel || '', c.party || '', c.subject || '',
+              c.validated ? badge('✓ ' + (c.validatedBy || ''), 'green') : badge('—', 'grey'),
+              el('div', { style: 'white-space:pre-wrap;font-size:12px;max-width:400px' }, c.body || ''),
+              el('button', { class: 'btn-danger btn-sm', onclick: () => { state.comms = state.comms.filter(x => x.id !== c.id); save(); setTab('comms'); } }, '✕')
+            ]))
       )
     ));
   };
   function commsForm() {
     const dir = el('select', {}, el('option', { value: 'in' }, '⇓ Entrante'), el('option', { value: 'out' }, '⇑ Sortante'));
-    const channel = el('select', {},
-      ...['VHF','HF','Inmarsat','LRIT','Téléphone','Email','SSAS','Sat-C','Telegram','Press','Autre']
-        .map(c => el('option', { value: c }, c))
-    );
-    const party = el('input', { placeholder: 'MRCC, UKMTO, P&I, Capitaine…' });
+    const channel = el('input', { list: 'dl-channels', placeholder: 'VHF, Inmarsat…' });
+    const party = el('input', { list: 'dl-parties' });
     const subject = el('input', {});
     const body = el('textarea', {});
-    const form = el('div', {},
-      twoCol('Sens', dir, 'Canal', channel),
-      twoCol('De / À', party, 'Sujet', subject),
-      field('Contenu', body),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          state.comms.unshift({
-            id: id(), ts: nowISO(),
-            dir: dir.value, channel: channel.value,
-            party: party.value, subject: subject.value, body: body.value
-          });
-          logMEL('COMMS', `${dir.value === 'in' ? '⇓' : '⇑'} ${channel.value} — ${party.value} : ${subject.value}`);
-          save(); closeModal(); setTab('comms');
-        } }, 'Enregistrer'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal('Nouvelle communication', form);
-  }
-  function deleteComm(idDel) {
-    state.comms = state.comms.filter(c => c.id !== idDel);
-    save(); setTab('comms');
+    const validated = el('input', { type: 'checkbox' });
+    const validatedBy = el('input', { placeholder: 'Nom du validateur (CMD/PIO)' });
+    const submit = () => {
+      state.comms.unshift({
+        id: id(), ts: nowISO(),
+        dir: dir.value, channel: channel.value, party: party.value,
+        subject: subject.value, body: body.value,
+        validated: validated.checked, validatedBy: validatedBy.value
+      });
+      logMEL('COMMS', `${dir.value === 'in' ? '⇓' : '⇑'} ${channel.value} — ${party.value}: ${subject.value}`);
+      save(); closeModal(); setTab('comms');
+    };
+    openModal('Nouvelle communication',
+      el('div', {},
+        twoCol('Sens', dir, 'Canal', channel),
+        twoCol('De/À', party, 'Sujet', subject),
+        field('Contenu', body),
+        el('label', { class: 'flex' }, validated, el('span', { style: 'margin-left:6px' }, 'Validé single-voice')),
+        field('Validé par', validatedBy),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Enregistrer'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
+        )
+      ), { onSubmit: submit });
   }
 
   // ============================================================
-  //  TAB : STAKEHOLDERS
+  //   STAKEHOLDERS
   // ============================================================
   renderers.stakeholders = (root) => {
-    root.appendChild(panel('Parties prenantes — annuaire de crise',
+    root.appendChild(panel('Annuaire de crise',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Contacts mobilisables 24/7 : MRCC, autorités, P&I, équipage, médias, familles'),
+          el('div', { class: 'muted' }, 'Mobilisable 24/7'),
           el('button', { class: 'btn-primary', onclick: () => stakeholderForm() }, '+ Ajouter')
         ),
-        state.stakeholders.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun contact.')
-          : tableEl(['Priorité', 'Nom', 'Rôle', 'Contact', ''],
-            state.stakeholders
-              .slice()
-              .sort((a, b) => (a.priority || 'P3').localeCompare(b.priority || 'P3'))
+        state.stakeholders.length === 0 ? el('div', { class: 'empty' }, 'Vide.')
+          : tableEl(['Pri.', 'Nom', 'Rôle', 'Contact', ''],
+            state.stakeholders.slice().sort((a, b) => (a.priority || 'P3').localeCompare(b.priority || 'P3'))
               .map(s => [
                 badge(s.priority || 'P3', s.priority === 'P1' ? 'red' : s.priority === 'P2' ? 'orange' : 'blue'),
-                s.name, s.role,
-                el('span', { class: 'mono' }, s.contact),
+                s.name, s.role, el('span', { class: 'mono' }, s.contact),
                 el('div', { class: 'flex' },
                   el('button', { class: 'btn-ghost btn-sm', onclick: () => stakeholderForm(s.id) }, 'Éditer'),
-                  el('button', { class: 'btn-danger btn-sm', onclick: () => deleteStakeholder(s.id) }, '✕')
-                )
-              ])
-          )
+                  el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.stakeholders = state.stakeholders.filter(x => x.id !== s.id); save(); setTab('stakeholders'); } } }, '✕'))
+              ]))
       )
     ));
   };
@@ -843,73 +1218,107 @@
     const name = el('input', { value: s.name || '' });
     const role = el('input', { value: s.role || '' });
     const contact = el('input', { value: s.contact || '' });
-    const priority = el('select', {},
-      ...['P1','P2','P3'].map(p => el('option', { value: p, selected: s.priority === p }, p))
-    );
-    const form = el('div', {},
-      twoCol('Nom / Org', name, 'Rôle', role),
-      twoCol('Contact', contact, 'Priorité', priority),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          const data = {
-            id: s.id || id(),
-            name: name.value, role: role.value, contact: contact.value, priority: priority.value
-          };
-          if (idEdit) {
-            const idx = state.stakeholders.findIndex(x => x.id === idEdit);
-            state.stakeholders[idx] = data;
-          } else {
-            state.stakeholders.push(data);
-          }
-          save(); closeModal(); setTab('stakeholders');
-        } }, idEdit ? 'Mettre à jour' : 'Ajouter'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal(idEdit ? 'Modifier contact' : 'Nouveau contact', form);
-  }
-  function deleteStakeholder(idDel) {
-    if (!confirm('Supprimer ?')) return;
-    state.stakeholders = state.stakeholders.filter(s => s.id !== idDel);
-    save(); setTab('stakeholders');
+    const priority = el('select', {}, ...['P1','P2','P3'].map(p => el('option', { value: p, selected: s.priority === p }, p)));
+    const submit = () => {
+      const data = { id: s.id || id(), name: name.value, role: role.value, contact: contact.value, priority: priority.value };
+      if (idEdit) state.stakeholders[state.stakeholders.findIndex(x => x.id === idEdit)] = data;
+      else state.stakeholders.push(data);
+      save(); closeModal(); setTab('stakeholders');
+    };
+    openModal(idEdit ? 'Éditer' : 'Nouveau contact',
+      el('div', {},
+        twoCol('Nom/Org', name, 'Rôle', role),
+        twoCol('Contact', contact, 'Priorité', priority),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
   }
 
   // ============================================================
-  //  TAB : RISK MATRIX
+  //   RESOURCES — moyens mobilisés (salvors, remorqueurs, médical)
+  // ============================================================
+  renderers.resources = (root) => {
+    root.appendChild(panel('Ressources mobilisées',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Tracking opérationnel des moyens engagés : remorqueurs, salvors LOF, équipes médicales, équipes protection embarquée, agents portuaires, support juridique.'),
+        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
+          el('div', { class: 'muted' }, `${state.resources.length} ressource(s)`),
+          el('button', { class: 'btn-primary', onclick: () => resourceForm() }, '+ Ressource')
+        ),
+        state.resources.length === 0 ? el('div', { class: 'empty' }, 'Aucune ressource.')
+          : tableEl(['Type', 'Désignation', 'Statut', 'ETA', 'Capacité', 'Contact', 'Notes', ''],
+            state.resources.map(r => [
+              badge(r.type, 'blue'), r.name,
+              badge(r.status, r.status === 'on-site' ? 'green' : r.status === 'enroute' ? 'orange' : r.status === 'standby' ? 'blue' : 'grey'),
+              fmtTime(r.eta), r.capacity || '—',
+              el('span', { class: 'mono' }, r.contact || '—'),
+              r.notes || '',
+              el('div', { class: 'flex' },
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => resourceForm(r.id) }, 'Éditer'),
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.resources = state.resources.filter(x => x.id !== r.id); save(); setTab('resources'); } } }, '✕'))
+            ]))
+      )
+    ));
+  };
+  function resourceForm(idEdit) {
+    const r = idEdit ? state.resources.find(x => x.id === idEdit) : { status: 'requested' };
+    const type = el('select', {}, ...['Remorqueur','Salvor','Médical','Protection (PCASP)','Aérien (HN/avion)','Agent maritime','Juridique','Plongeurs','Autre']
+      .map(t => el('option', { value: t, selected: r.type === t }, t)));
+    const name = el('input', { value: r.name || '' });
+    const status = el('select', {}, ...[['requested','Demandé'],['confirmed','Confirmé'],['enroute','En route'],['on-site','Sur site'],['released','Relâché']]
+      .map(([k, l]) => el('option', { value: k, selected: r.status === k }, l)));
+    const eta = el('input', { type: 'datetime-local', value: r.eta ? new Date(r.eta).toISOString().slice(0, 16) : '' });
+    const capacity = el('input', { value: r.capacity || '', placeholder: 'BHP, IBP, places, capacité' });
+    const contact = el('input', { value: r.contact || '' });
+    const notes = el('textarea', {}, r.notes || '');
+    const submit = () => {
+      const data = { id: r.id || id(), type: type.value, name: name.value, status: status.value,
+        eta: eta.value ? new Date(eta.value).toISOString() : '',
+        capacity: capacity.value, contact: contact.value, notes: notes.value };
+      if (idEdit) state.resources[state.resources.findIndex(x => x.id === idEdit)] = data;
+      else { state.resources.push(data); logMEL('INFO', `Ressource mobilisée : ${data.type} — ${data.name}`); }
+      save(); closeModal(); setTab('resources');
+    };
+    openModal(idEdit ? 'Éditer ressource' : 'Nouvelle ressource',
+      el('div', {},
+        twoCol('Type', type, 'Désignation', name),
+        twoCol('Statut', status, 'ETA', eta),
+        twoCol('Capacité', capacity, 'Contact', contact),
+        field('Notes', notes),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
+  }
+
+  // ============================================================
+  //   RISK MATRIX
   // ============================================================
   renderers.risk = (root) => {
-    const intro = panel('Matrice de risque 5×5',
+    root.appendChild(panel('Matrice 5×5',
       el('div', {},
-        el('p', { class: 'muted' }, 'Évaluation Likelihood × Severity. Cliquez sur une cellule pour ajouter un risque, sur un risque pour le détailler.'),
+        el('p', { class: 'muted' }, 'Likelihood × Severity. Cliquer une case pour ajouter.'),
         riskMatrixView()
       )
-    );
-    const list = panel('Registre des risques',
+    ));
+    root.appendChild(panel('Registre',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, `${state.risks.length} risque(s) suivi(s)`),
-          el('button', { class: 'btn-primary', onclick: () => riskForm() }, '+ Nouveau risque')
+          el('div', { class: 'muted' }, `${state.risks.length} risque(s)`),
+          el('button', { class: 'btn-primary', onclick: () => riskForm() }, '+ Risque')
         ),
-        state.risks.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun risque.')
+        state.risks.length === 0 ? el('div', { class: 'empty' }, 'Aucun.')
           : tableEl(['Titre', 'L', 'S', 'Score', 'Mitigation', 'Owner', ''],
-            state.risks.map(r => [
-              r.title,
-              r.likelihood,
-              r.severity,
-              badge(r.likelihood * r.severity, riskScoreClass(r.likelihood * r.severity)),
-              r.mitigation || '',
-              r.owner || '',
+            state.risks.map(r => [r.title, r.likelihood, r.severity,
+              badge(r.likelihood * r.severity, riskScoreClass(r.likelihood * r.severity).replace('r-', '').replace('crit', 'red').replace('high', 'orange').replace('med', 'yellow').replace('low', 'green')),
+              r.mitigation || '', r.owner || '',
               el('div', { class: 'flex' },
                 el('button', { class: 'btn-ghost btn-sm', onclick: () => riskForm(r.id) }, 'Éditer'),
-                el('button', { class: 'btn-danger btn-sm', onclick: () => deleteRisk(r.id) }, '✕')
-              )
-            ])
-          )
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.risks = state.risks.filter(x => x.id !== r.id); save(); setTab('risk'); } } }, '✕'))
+            ]))
       )
-    );
-    root.appendChild(intro);
-    root.appendChild(list);
+    ));
   };
   function riskMatrixView() {
     const matrix = el('div', { class: 'risk-matrix' });
@@ -940,64 +1349,44 @@
     const likelihood = el('input', { type: 'number', min: 1, max: 5, value: r.likelihood || 3 });
     const severity = el('input', { type: 'number', min: 1, max: 5, value: r.severity || 3 });
     const mitigation = el('textarea', {}, r.mitigation || '');
-    const owner = el('input', { value: r.owner || '' });
-    const form = el('div', {},
-      field('Titre', title),
-      twoCol('Likelihood (1-5)', likelihood, 'Severity (1-5)', severity),
-      twoCol('Owner', owner, '', el('span')),
-      field('Mitigation', mitigation),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          const data = {
-            id: r.id || id(), title: title.value,
-            likelihood: parseInt(likelihood.value, 10) || 1,
-            severity: parseInt(severity.value, 10) || 1,
-            mitigation: mitigation.value, owner: owner.value
-          };
-          if (idEdit) {
-            const idx = state.risks.findIndex(x => x.id === idEdit);
-            state.risks[idx] = data;
-          } else {
-            state.risks.push(data);
-          }
-          save(); closeModal(); setTab('risk');
-        } }, idEdit ? 'Mettre à jour' : 'Ajouter'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal(idEdit ? 'Modifier risque' : 'Nouveau risque', form);
-  }
-  function deleteRisk(idDel) {
-    if (!confirm('Supprimer ?')) return;
-    state.risks = state.risks.filter(r => r.id !== idDel);
-    save(); setTab('risk');
+    const owner = el('input', { value: r.owner || currentUserName(), list: 'dl-owners' });
+    const submit = () => {
+      const data = { id: r.id || id(), title: title.value,
+        likelihood: parseInt(likelihood.value, 10) || 1, severity: parseInt(severity.value, 10) || 1,
+        mitigation: mitigation.value, owner: owner.value };
+      if (idEdit) state.risks[state.risks.findIndex(x => x.id === idEdit)] = data;
+      else state.risks.push(data);
+      save(); closeModal(); setTab('risk');
+    };
+    openModal(idEdit ? 'Éditer risque' : 'Nouveau risque',
+      el('div', {},
+        field('Titre', title),
+        twoCol('Likelihood (1-5)', likelihood, 'Severity (1-5)', severity),
+        twoCol('Owner', owner, '', el('span')),
+        field('Mitigation', mitigation),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
   }
 
   // ============================================================
-  //  TAB : BATTLE RHYTHM
+  //   BATTLE RHYTHM
   // ============================================================
   renderers.rhythm = (root) => {
-    root.appendChild(panel('Battle Rhythm — cadence opérationnelle',
+    root.appendChild(panel('Battle Rhythm',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Briefings, points de situation, cycles SITREP — inspiré des HQ militaires.'),
-          el('button', { class: 'btn-primary', onclick: () => rhythmForm() }, '+ Ajouter rendez-vous')
+          el('div', { class: 'muted' }, 'Cadence des briefings et SITREP — pratique HQ militaire.'),
+          el('button', { class: 'btn-primary', onclick: () => rhythmForm() }, '+ Rendez-vous')
         ),
-        state.rhythm.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun rendez-vous.')
+        state.rhythm.length === 0 ? el('div', { class: 'empty' }, 'Vide.')
           : tableEl(['Heure', 'Titre', 'Cadence', 'Description', ''],
-            state.rhythm
-              .slice()
-              .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
-              .map(r => [
-                el('span', { class: 'mono' }, r.time),
-                r.title, r.cadence, r.desc,
+            state.rhythm.slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+              .map(r => [el('span', { class: 'mono' }, r.time), r.title, r.cadence, r.desc,
                 el('div', { class: 'flex' },
                   el('button', { class: 'btn-ghost btn-sm', onclick: () => rhythmForm(r.id) }, 'Éditer'),
-                  el('button', { class: 'btn-danger btn-sm', onclick: () => deleteRhythm(r.id) }, '✕')
-                )
-              ])
-          )
+                  el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.rhythm = state.rhythm.filter(x => x.id !== r.id); save(); setTab('rhythm'); } } }, '✕'))]))
       )
     ));
   };
@@ -1005,57 +1394,157 @@
     const r = idEdit ? state.rhythm.find(x => x.id === idEdit) : {};
     const time = el('input', { type: 'time', value: r.time || '08:00' });
     const title = el('input', { value: r.title || '' });
-    const cadence = el('select', {},
-      ...['Quotidien','6H','12H','Hebdo','Sur demande'].map(c => el('option', { value: c, selected: r.cadence === c }, c))
-    );
+    const cadence = el('select', {}, ...['Quotidien','6H','12H','Hebdo','Sur demande'].map(c => el('option', { value: c, selected: r.cadence === c }, c)));
     const desc = el('textarea', {}, r.desc || '');
-    const form = el('div', {},
-      twoCol('Heure', time, 'Cadence', cadence),
-      field('Titre', title),
-      field('Description', desc),
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => {
-          const data = {
-            id: r.id || id(),
-            time: time.value, title: title.value,
-            cadence: cadence.value, desc: desc.value
-          };
-          if (idEdit) {
-            const idx = state.rhythm.findIndex(x => x.id === idEdit);
-            state.rhythm[idx] = data;
-          } else {
-            state.rhythm.push(data);
-          }
-          save(); closeModal(); setTab('rhythm');
-        } }, idEdit ? 'Mettre à jour' : 'Ajouter'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
-      )
-    );
-    openModal(idEdit ? 'Modifier rendez-vous' : 'Nouveau rendez-vous', form);
-  }
-  function deleteRhythm(idDel) {
-    if (!confirm('Supprimer ?')) return;
-    state.rhythm = state.rhythm.filter(r => r.id !== idDel);
-    save(); setTab('rhythm');
+    const submit = () => {
+      const data = { id: r.id || id(), time: time.value, title: title.value, cadence: cadence.value, desc: desc.value };
+      if (idEdit) state.rhythm[state.rhythm.findIndex(x => x.id === idEdit)] = data;
+      else state.rhythm.push(data);
+      save(); closeModal(); setTab('rhythm');
+    };
+    openModal(idEdit ? 'Éditer' : 'Nouveau rendez-vous',
+      el('div', {},
+        twoCol('Heure', time, 'Cadence', cadence),
+        field('Titre', title),
+        field('Description', desc),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
   }
 
   // ============================================================
-  //  TAB : SITREP
+  //   PASSATION DE QUART (naval REX)
+  // ============================================================
+  renderers.passation = (root) => {
+    root.appendChild(panel('Passation de quart — handover',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Pratique navale obligatoire : transfert formel de responsabilité avec checklist signée par les deux parties. Inspiré de la relève en passerelle et de l\'ICS Form 201.'),
+        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
+          el('div', { class: 'muted' }, `${state.passations.length} passation(s)`),
+          el('button', { class: 'btn-primary', onclick: () => passationForm() }, '+ Passation')
+        ),
+        state.passations.length === 0 ? el('div', { class: 'empty' }, 'Aucune passation.')
+          : el('div', { class: 'cards' }, ...state.passations.map(p =>
+            el('div', { class: 'card' },
+              el('div', { class: 'flex-between' },
+                el('div', { class: 'card-title' }, `${p.fromUser || '?'} → ${p.toUser || '?'}`),
+                el('span', { class: 'mono', style: 'color:var(--muted)' }, fmtDTG(p.ts))),
+              p.signoff ? badge('✓ Signée par ' + p.toUser, 'green') : badge('En attente sign-off', 'orange'),
+              el('div', { class: 'card-body' },
+                ...(p.items || []).map((it, idx) => el('div', { class: 'pb-step' },
+                  el('span', {}, it.checked ? '✅' : '☐'),
+                  el('span', { class: 'pb-text' + (it.checked ? ' done' : '') }, ` ${idx + 1}. ${it.label}` + (it.note ? ` — ${it.note}` : '')))),
+                p.notes ? el('div', { style: 'margin-top:8px' }, el('strong', {}, 'Notes : '), p.notes) : null),
+              el('div', { class: 'card-actions' },
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => passationForm(p.id) }, 'Éditer'),
+                !p.signoff ? el('button', { class: 'btn-success btn-sm', onclick: () => signoffPassation(p.id) }, '✓ Signer (relève)') : null,
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => download(`Passation_${p.id}.txt`, exportPassation(p)) }, '⬇ Export'),
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.passations = state.passations.filter(x => x.id !== p.id); save(); setTab('passation'); } } }, '✕')))))
+      )
+    ));
+  };
+  function passationForm(idEdit) {
+    const p = idEdit ? state.passations.find(x => x.id === idEdit)
+      : {
+          ts: nowISO(),
+          fromUser: currentUserName(),
+          items: window.HANDOVER_CHECKLIST.map(label => ({ label, checked: false, note: '' }))
+        };
+    const fromUser = el('input', { value: p.fromUser || currentUserName() });
+    const toUser = el('input', { value: p.toUser || '', placeholder: 'Nom de la relève' });
+    const notes = el('textarea', { placeholder: 'Notes complémentaires libres' }, p.notes || '');
+    // Pré-remplissage : récap auto des éléments d'état courants
+    const autoFill = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+      const open = state.actions.filter(a => a.status !== 'done');
+      const incs = state.incidents.filter(i => i.status !== 'closed');
+      const tip = [
+        `Niveau d'alerte : ${state.alert.toUpperCase()} — Phase ${state.phase}`,
+        `Incidents actifs : ${incs.length}`,
+        `Actions ouvertes (P1) : ${open.filter(a => a.priority === 'P1').length}`,
+        `Total actions ouvertes : ${open.length}`,
+        `Ressources actives : ${state.resources.filter(r => ['enroute','on-site','confirmed'].includes(r.status)).length}`
+      ].join('\n');
+      notes.value = (notes.value ? notes.value + '\n\n' : '') + tip;
+    } }, '↓ Pré-remplir avec l\'état courant');
+
+    const itemsBox = el('div');
+    p.items.forEach((it, idx) => {
+      const cb = el('input', { type: 'checkbox' }); cb.checked = !!it.checked;
+      const note = el('input', { placeholder: 'Note', value: it.note || '' });
+      cb.addEventListener('change', () => it.checked = cb.checked);
+      note.addEventListener('change', () => it.note = note.value);
+      itemsBox.appendChild(el('div', { class: 'pb-step' }, cb,
+        el('div', { style: 'flex:1' },
+          el('div', { class: 'pb-text' }, `${idx + 1}. ${it.label}`),
+          note)));
+    });
+
+    const submit = () => {
+      const data = { id: p.id || id(),
+        ts: p.ts || nowISO(),
+        fromUser: fromUser.value, toUser: toUser.value,
+        items: p.items, notes: notes.value, signoff: p.signoff || false };
+      if (idEdit) state.passations[state.passations.findIndex(x => x.id === idEdit)] = data;
+      else { state.passations.unshift(data); logMEL('INFO', `Passation ${data.fromUser} → ${data.toUser}`); }
+      save(); closeModal(); setTab('passation');
+    };
+    openModal(idEdit ? 'Éditer passation' : 'Nouvelle passation de quart',
+      el('div', {},
+        twoCol('De (sortant)', fromUser, 'À (relève)', toUser),
+        autoFill,
+        el('h4', { style: 'margin:14px 0 6px' }, 'Checklist (cocher au fur et à mesure)'),
+        itemsBox,
+        field('Notes', notes),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Enregistrer'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
+  }
+  function signoffPassation(idP) {
+    const p = state.passations.find(x => x.id === idP);
+    if (!p) return;
+    if (p.toUser !== currentUserName()) {
+      if (!confirm(`Vous êtes connecté comme "${currentUserName()}". La passation est destinée à "${p.toUser}". Signer quand même ?`)) return;
+    }
+    p.signoff = true; p.signoffTs = nowISO(); p.signoffBy = currentUserName();
+    logMEL('INFO', `Passation signée par ${p.signoffBy}`);
+    save(); setTab('passation');
+  }
+  function exportPassation(p) {
+    const lines = [
+      `PASSATION DE QUART — CMA Ships Crisis Cell`,
+      `DTG : ${fmtDTG(p.ts)}`,
+      `DE  : ${p.fromUser}`,
+      `À   : ${p.toUser}`,
+      `Sign-off : ${p.signoff ? '✓ ' + p.signoffBy + ' @ ' + fmtDTG(p.signoffTs) : 'EN ATTENTE'}`,
+      '='.repeat(60),
+      ''
+    ];
+    p.items.forEach((it, idx) => {
+      lines.push(`[${it.checked ? 'X' : ' '}] ${idx + 1}. ${it.label}` + (it.note ? `\n      Note: ${it.note}` : ''));
+    });
+    if (p.notes) lines.push('', '--- Notes ---', p.notes);
+    return lines.join('\n');
+  }
+
+  // ============================================================
+  //   SITREP
   // ============================================================
   renderers.sitrep = (root) => {
-    const builderInputs = {
+    const inputs = {
       classif: el('select', {}, ...['NON CLASSIFIÉ','DIFFUSION RESTREINTE','CONFIDENTIEL','SECRET'].map(c => el('option', { value: c }, c))),
       dest: el('input', { value: 'COMEX CMA — État pavillon — P&I — Affréteur' }),
-      situation: el('textarea', { placeholder: 'Synthèse globale en 3-5 lignes' }),
-      assessment: el('textarea', { placeholder: 'Évolution attendue, hypothèses (best/likely/worst case)' }),
-      requests: el('textarea', { placeholder: 'Ressources demandées, support requis' }),
+      situation: el('textarea', { placeholder: 'Synthèse 3-5 lignes' }),
+      assessment: el('textarea', { placeholder: 'Évolution attendue (best/likely/worst)' }),
+      requests: el('textarea', { placeholder: 'Ressources / support requis' }),
       next: el('input', { value: '+6H' }),
-      signature: el('input', { value: 'Crisis Manager — DPA' })
+      signature: el('input', { value: currentUserName() + ' — Crisis Manager' })
     };
-
+    const preview = el('pre', { class: 'sitrep-preview' }, '— Cliquez "Générer" —');
     const buildBtn = el('button', { class: 'btn-primary', onclick: () => {
       state.sitrepCounter = (state.sitrepCounter || 0) + 1;
-      const text = renderSITREP(builderInputs);
+      const text = renderSITREP(inputs);
       preview.textContent = text;
       state.sitreps.unshift({ id: id(), ts: nowISO(), num: state.sitrepCounter, text });
       logMEL('INFO', `SITREP N°${state.sitrepCounter} généré`);
@@ -1064,35 +1553,23 @@
     const printBtn = el('button', { class: 'btn-ghost', onclick: () => window.print() }, '🖨 Imprimer');
     const dlBtn = el('button', { class: 'btn-ghost', onclick: () => download(`SITREP_${state.sitrepCounter || 'X'}.txt`, preview.textContent) }, '⬇ Télécharger');
 
-    const preview = el('pre', { class: 'sitrep-preview' }, '— Cliquez "Générer SITREP" —');
-
-    const builderPanel = panel('Générateur de SITREP — format NATO 5 paragraphes adapté maritime',
+    root.appendChild(panel('Générateur SITREP — format NATO 5 paragraphes',
       el('div', {},
-        twoCol('Classification', builderInputs.classif, 'Destinataires', builderInputs.dest),
-        field('1. Situation générale', builderInputs.situation),
-        field('7. Évaluation / évolution', builderInputs.assessment),
-        field('8. Demandes / support', builderInputs.requests),
-        twoCol('9. Prochain SITREP', builderInputs.next, 'Signature', builderInputs.signature),
-        el('div', { class: 'flex', style: 'margin-top:10px' }, buildBtn, printBtn, dlBtn)
-      )
-    );
-
-    root.appendChild(builderPanel);
+        twoCol('Classification', inputs.classif, 'Destinataires', inputs.dest),
+        field('1. Situation générale', inputs.situation),
+        field('7. Évaluation / évolution', inputs.assessment),
+        field('8. Demandes / support', inputs.requests),
+        twoCol('9. Prochain SITREP', inputs.next, 'Signature', inputs.signature),
+        el('div', { class: 'flex', style: 'margin-top:10px' }, buildBtn, printBtn, dlBtn))));
     root.appendChild(panel('Aperçu', preview));
-
     if (state.sitreps.length) {
-      root.appendChild(panel('SITREPs précédents',
-        tableEl(['N°', 'Émis', ''],
-          state.sitreps.map(s => [
-            'N°' + s.num,
-            fmtDTG(s.ts),
-            el('div', { class: 'flex' },
-              el('button', { class: 'btn-ghost btn-sm', onclick: () => { preview.textContent = s.text; window.scrollTo({ top: 0, behavior: 'smooth' }); } }, 'Recharger'),
-              el('button', { class: 'btn-danger btn-sm', onclick: () => { state.sitreps = state.sitreps.filter(x => x.id !== s.id); save(); setTab('sitrep'); } }, '✕')
-            )
-          ])
-        )
-      ));
+      root.appendChild(panel('Précédents',
+        tableEl(['N°', 'Émis', ''], state.sitreps.map(s => [
+          'N°' + s.num, fmtDTG(s.ts),
+          el('div', { class: 'flex' },
+            el('button', { class: 'btn-ghost btn-sm', onclick: () => { preview.textContent = s.text; window.scrollTo({ top: 0, behavior: 'smooth' }); } }, 'Recharger'),
+            el('button', { class: 'btn-danger btn-sm', onclick: () => { state.sitreps = state.sitreps.filter(x => x.id !== s.id); save(); setTab('sitrep'); } }, '✕'))
+        ]))));
     }
   };
   function renderSITREP(inputs) {
@@ -1101,25 +1578,22 @@
     const actsDone = state.actions.filter(a => a.status === 'done').slice(0, 10);
     const actsPlan = state.actions.filter(a => a.status !== 'done').slice(0, 10);
     const decisions = state.decisions.slice(0, 5);
-
     const fmtList = arr => arr.length === 0 ? 'Néant.' : arr.join('\n');
-
     return window.SITREP_TEMPLATE
       .replace('{DTG}', fmtDTG(nowISO()))
       .replace('{NUM}', String(state.sitrepCounter || '-').padStart(3, '0'))
       .replace('{DEST}', inputs.dest.value)
       .replace('{CLASSIF}', inputs.classif.value)
-      .replace('{ALERT}', state.alert.toUpperCase())
+      .replace('{ALERT}', state.alert.toUpperCase() + ' / phase ' + state.phase)
       .replace('{OPS}', state.opsPeriod || '-')
       .replace('{SITUATION}', inputs.situation.value || '-')
       .replace('{INCIDENTS}', fmtList(incs.map(i =>
-        ` - [${i.ref}] ${i.type} sur ${i.vessel || 'n/a'} — sev ${i.severity.toUpperCase()} — depuis ${fmtDTG(i.startedAt)}\n   Résumé : ${(i.summary || '').replace(/\n/g, ' ')}`
+        ` - [${i.ref}] ${i.type} sur ${i.vessel || 'n/a'} — INES ${i.ines ?? '?'} / sev ${(i.severity || '?').toUpperCase()}${i.roe ? ' / ROE ' + i.roe : ''}\n   Démarré : ${fmtDTG(i.startedAt)}\n   ${(i.summary || '').replace(/\n/g, ' ')}`
       )))
       .replace('{VESSELS}', fmtList(vessels.map(v =>
-        ` - ${v.name} (IMO ${v.imo || '-'}) — ${v.status.toUpperCase()} — pos ${v.position || '-'}`
-      )))
-      .replace('{ACTIONS_DONE}', fmtList(actsDone.map(a => ` - [${a.priority}] ${a.text} (owner ${a.owner})`)))
-      .replace('{ACTIONS_PLANNED}', fmtList(actsPlan.map(a => ` - [${a.priority}] ${a.text} — owner ${a.owner}, due ${fmtDTG(a.due)}`)))
+        ` - ${v.name} (IMO ${v.imo || '-'}) — ${v.status.toUpperCase()} — pos ${v.position || '-'}`)))
+      .replace('{ACTIONS_DONE}', fmtList(actsDone.map(a => ` - [${a.priority}] ${a.text} (${a.owner})`)))
+      .replace('{ACTIONS_PLANNED}', fmtList(actsPlan.map(a => ` - [${a.priority}] ${a.text} — ${a.owner}, due ${fmtDTG(a.due)}`)))
       .replace('{DECISIONS}', fmtList(decisions.map(d => ` - ${d.title} — ${d.decide || '(en cours)'} (${d.status})`)))
       .replace('{ASSESSMENT}', inputs.assessment.value || '-')
       .replace('{REQUESTS}', inputs.requests.value || 'Néant.')
@@ -1128,25 +1602,119 @@
   }
 
   // ============================================================
-  //  TAB : PLAYBOOKS
+  //   OPORD GENERATOR (5 paragraphes militaires)
+  // ============================================================
+  renderers.opord = (root) => {
+    const inputs = {
+      classif: el('select', {}, ...['NON CLASSIFIÉ','DIFFUSION RESTREINTE','CONFIDENTIEL'].map(c => el('option', { value: c }, c))),
+      issuer: el('input', { value: currentUserName() + ' — Crisis Manager' }),
+      dest: el('input', { value: 'Cellule de crise CMA Ships' }),
+      ref: el('input', { placeholder: 'SITREP n°x du DTG…' }),
+      sitContext: el('textarea', { placeholder: 'Menace / contexte / météo / cinétique' }),
+      sitFriendly: el('textarea', { placeholder: 'Forces amies, ressources mobilisées' }),
+      sitAssumptions: el('textarea', { placeholder: 'Hypothèses retenues' }),
+      mission: el('textarea', { placeholder: 'QUI fait QUOI, QUAND, OÙ, et POURQUOI' }),
+      intent: el('textarea', { placeholder: 'Intention du Crisis Manager — résultat à atteindre' }),
+      concept: el('textarea', { placeholder: 'Concept d\'opération' }),
+      endState: el('textarea', { placeholder: 'État final recherché' }),
+      nogo: el('textarea', { placeholder: 'No-go criteria : conditions d\'arrêt' }),
+      tasks: el('textarea', { placeholder: 'Tâches par cellule (OPS / LOG / PIO / LEG…)' }),
+      coordination: el('textarea', { placeholder: 'Timing, points de contrôle' }),
+      support: el('textarea', { placeholder: 'Logistique : salvage, P&I, agences, médical' }),
+      commandChain: el('textarea', { placeholder: 'Chaîne de commandement, succession' }),
+      comms: el('textarea', { placeholder: 'Canaux, fréquences, classification' }),
+      reporting: el('input', { value: 'SITREP toutes les 6H' }),
+      signature: el('input', { value: currentUserName() })
+    };
+    const preview = el('pre', { class: 'sitrep-preview' }, '— Cliquez "Générer OPORD" —');
+    const buildBtn = el('button', { class: 'btn-primary', onclick: () => {
+      state.opordCounter = (state.opordCounter || 0) + 1;
+      const txt = renderOPORD(inputs);
+      preview.textContent = txt;
+      state.opords.unshift({ id: id(), ts: nowISO(), num: state.opordCounter, text: txt });
+      logMEL('DECISION', `OPORD N°${state.opordCounter} émis`);
+      save();
+    } }, '⚡ Générer OPORD');
+
+    root.appendChild(panel('Générateur OPORD — ordre d\'opération militaire (5 paragraphes)',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Format NATO/US Army : Situation / Mission / Exécution / Soutien / Commandement & transmissions. Permet à toute la cellule d\'avoir l\'intention et le concept partagés.'),
+        twoCol('Classification', inputs.classif, 'Référence', inputs.ref),
+        twoCol('Émetteur', inputs.issuer, 'Destinataire', inputs.dest),
+        el('h4', {}, '1. Situation'),
+        field('Contexte', inputs.sitContext),
+        field('Forces amies / ressources', inputs.sitFriendly),
+        field('Hypothèses', inputs.sitAssumptions),
+        el('h4', {}, '2. Mission'),
+        field('Mission (5W)', inputs.mission),
+        el('h4', {}, '3. Exécution'),
+        field('Intention du Crisis Manager', inputs.intent),
+        field('Concept d\'opération', inputs.concept),
+        field('End-state', inputs.endState),
+        field('No-go criteria', inputs.nogo),
+        field('Tâches par cellule', inputs.tasks),
+        field('Coordination', inputs.coordination),
+        el('h4', {}, '4. Soutien'),
+        field('Logistique', inputs.support),
+        el('h4', {}, '5. Commandement & transmissions'),
+        field('Chaîne de commandement', inputs.commandChain),
+        field('Canaux et fréquences', inputs.comms),
+        twoCol('Cadence SITREP', inputs.reporting, 'Signature', inputs.signature),
+        el('div', { class: 'flex', style: 'margin-top:10px' },
+          buildBtn,
+          el('button', { class: 'btn-ghost', onclick: () => window.print() }, '🖨 Imprimer'),
+          el('button', { class: 'btn-ghost', onclick: () => download(`OPORD_${state.opordCounter || 'X'}.txt`, preview.textContent) }, '⬇ Télécharger')))));
+    root.appendChild(panel('Aperçu', preview));
+    if (state.opords.length) {
+      root.appendChild(panel('OPORDs précédents',
+        tableEl(['N°', 'Émis', ''], state.opords.map(s => [
+          'N°' + s.num, fmtDTG(s.ts),
+          el('div', { class: 'flex' },
+            el('button', { class: 'btn-ghost btn-sm', onclick: () => { preview.textContent = s.text; window.scrollTo({ top: 0, behavior: 'smooth' }); } }, 'Recharger'),
+            el('button', { class: 'btn-danger btn-sm', onclick: () => { state.opords = state.opords.filter(x => x.id !== s.id); save(); setTab('opord'); } }, '✕'))
+        ]))));
+    }
+  };
+  function renderOPORD(i) {
+    return window.OPORD_TEMPLATE
+      .replace('{DTG}', fmtDTG(nowISO()))
+      .replace('{NUM}', String(state.opordCounter || '-').padStart(3, '0'))
+      .replace('{ISSUER}', i.issuer.value)
+      .replace('{DEST}', i.dest.value)
+      .replace('{CLASSIF}', i.classif.value)
+      .replace('{REF}', i.ref.value || '-')
+      .replace('{SIT_CONTEXT}', i.sitContext.value || '-')
+      .replace('{SIT_FRIENDLY}', i.sitFriendly.value || '-')
+      .replace('{SIT_ASSUMPTIONS}', i.sitAssumptions.value || '-')
+      .replace('{MISSION}', i.mission.value || '-')
+      .replace('{INTENT}', i.intent.value || '-')
+      .replace('{CONCEPT}', i.concept.value || '-')
+      .replace('{END_STATE}', i.endState.value || '-')
+      .replace('{NOGO}', i.nogo.value || '-')
+      .replace('{TASKS}', i.tasks.value || '-')
+      .replace('{COORDINATION}', i.coordination.value || '-')
+      .replace('{SUPPORT}', i.support.value || '-')
+      .replace('{COMMAND_CHAIN}', i.commandChain.value || '-')
+      .replace('{COMMS}', i.comms.value || '-')
+      .replace('{REPORTING}', i.reporting.value || 'SITREP 6H')
+      .replace('{SIGNATURE}', i.signature.value || '-');
+  }
+
+  // ============================================================
+  //   PLAYBOOKS
   // ============================================================
   renderers.playbooks = (root) => {
-    root.appendChild(panel('Playbooks d\'urgence — checklists maritimes',
+    root.appendChild(panel('Playbooks d\'urgence',
       el('div', {},
-        el('p', { class: 'muted' }, 'Procédures inspirées ISM Code, IMO A.1072(28), BMP5, SOLAS, ISPS, IAMSAR, BIMCO Cyber Guidelines. À adapter aux procédures internes CMA Ships.'),
-        el('div', { class: 'cards' },
-          ...window.PLAYBOOKS.map(pb => el('div', { class: 'card' },
-            el('div', { class: 'flex-between' },
-              el('div', { class: 'card-title' }, pb.title),
-              badge(pb.severity, pb.severity === 'crit' ? 'red' : pb.severity === 'high' ? 'orange' : 'blue')
-            ),
-            el('div', { class: 'card-meta' }, 'Réf : ' + pb.refs.join(' · ')),
-            el('div', { class: 'card-actions' },
-              el('button', { class: 'btn-primary btn-sm', onclick: () => openPlaybook(pb) }, 'Ouvrir'),
-              el('button', { class: 'btn-ghost btn-sm', onclick: () => activatePlaybook(pb) }, 'Activer (créer actions)')
-            )
-          ))
-        )
+        el('p', { class: 'muted' }, 'ISM Code, IMO A.1072(28), BMP5, SOLAS, ISPS, IAMSAR, BIMCO Cyber.'),
+        el('div', { class: 'cards' }, ...window.PLAYBOOKS.map(pb => el('div', { class: 'card' },
+          el('div', { class: 'flex-between' },
+            el('div', { class: 'card-title' }, pb.title),
+            badge(pb.severity, pb.severity === 'crit' ? 'red' : pb.severity === 'high' ? 'orange' : 'blue')),
+          el('div', { class: 'card-meta' }, 'Réf : ' + pb.refs.join(' · ')),
+          el('div', { class: 'card-actions' },
+            el('button', { class: 'btn-primary btn-sm', onclick: () => openPlaybook(pb) }, 'Ouvrir'),
+            el('button', { class: 'btn-ghost btn-sm', onclick: () => activatePlaybook(pb) }, 'Activer (créer actions)')))))
       )
     ));
   };
@@ -1154,8 +1722,7 @@
     const stateMap = state.playbookState[pb.id] || {};
     const stepsBox = el('div', {});
     pb.steps.forEach((step, idx) => {
-      const cb = el('input', { type: 'checkbox' });
-      cb.checked = !!stateMap[idx];
+      const cb = el('input', { type: 'checkbox' }); cb.checked = !!stateMap[idx];
       const txt = el('div', { class: 'pb-text' + (cb.checked ? ' done' : '') }, `${idx + 1}. ${step}`);
       cb.addEventListener('change', () => {
         stateMap[idx] = cb.checked;
@@ -1165,97 +1732,222 @@
       });
       stepsBox.appendChild(el('div', { class: 'pb-step' }, cb, txt));
     });
-    const wrapper = el('div', {},
-      el('div', { class: 'card-meta', style: 'margin-bottom:10px' }, 'Réf : ' + pb.refs.join(' · ')),
-      stepsBox,
-      el('div', { class: 'flex', style: 'margin-top:14px' },
-        el('button', { class: 'btn-primary', onclick: () => activatePlaybook(pb) }, '→ Activer ce playbook (créer actions)'),
-        el('button', { class: 'btn-ghost', onclick: closeModal }, 'Fermer')
-      )
-    );
-    openModal(pb.title, wrapper);
+    openModal(pb.title,
+      el('div', {},
+        el('div', { class: 'card-meta', style: 'margin-bottom:10px' }, 'Réf : ' + pb.refs.join(' · ')),
+        stepsBox,
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: () => activatePlaybook(pb) }, '→ Activer (créer actions)'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Fermer'))));
   }
   function activatePlaybook(pb) {
-    let n = 0;
-    pb.steps.forEach((step, idx) => {
-      state.actions.push({
-        id: id(),
-        text: `[${pb.title}] ${step}`,
-        owner: '',
-        priority: pb.severity === 'crit' ? 'P1' : pb.severity === 'high' ? 'P2' : 'P3',
-        status: 'todo',
-        due: '',
-        createdAt: nowISO()
-      });
-      n++;
-    });
-    logMEL('ACTION', `Playbook "${pb.title}" activé : ${n} actions créées`);
-    save();
-    closeModal();
-    setTab('actions');
+    pb.steps.forEach(step => state.actions.push({
+      id: id(), text: `[${pb.title}] ${step}`, owner: '',
+      priority: pb.severity === 'crit' ? 'P1' : pb.severity === 'high' ? 'P2' : 'P3',
+      status: 'todo', due: '', createdAt: nowISO()
+    }));
+    logMEL('ACTION', `Playbook "${pb.title}" activé : ${pb.steps.length} actions créées`);
+    save(); closeModal(); setTab('actions');
   }
 
   // ============================================================
-  //  TAB : CCIR
+  //   CCIR
   // ============================================================
   renderers.ccir = (root) => {
-    root.appendChild(panel('CCIR — Commander\'s Critical Information Requirements',
+    root.appendChild(panel('CCIR — informations critiques pour le Crisis Manager',
       el('div', {},
-        el('p', { class: 'muted' }, 'Information dont le Crisis Manager a besoin pour décider. PIR = renseignement prioritaire, FFIR = état force amie, EEFI = à ne PAS divulguer.'),
+        el('p', { class: 'muted' }, 'PIR (renseignement prioritaire), FFIR (état force amie), EEFI (à NE PAS divulguer).'),
         ...state.ccir.map(c => {
           const itemsBox = el('div', {});
           (c.items || []).forEach((it, idx) => {
             itemsBox.appendChild(el('div', { class: 'pb-step' },
               el('div', { class: 'pb-text' }, '• ' + it),
-              el('button', { class: 'btn-danger btn-sm', onclick: () => {
-                c.items.splice(idx, 1); save(); setTab('ccir');
-              } }, '✕')
-            ));
+              el('button', { class: 'btn-danger btn-sm', onclick: () => { c.items.splice(idx, 1); save(); setTab('ccir'); } }, '✕')));
           });
-          const input = el('input', { placeholder: 'Saisir une information…' });
+          const input = el('input', { placeholder: 'Information…' });
           const addBtn = el('button', { class: 'btn-primary btn-sm', onclick: () => {
             if (!input.value.trim()) return;
             c.items = c.items || [];
             c.items.push(input.value.trim());
             save(); setTab('ccir');
           } }, '+ Ajouter');
-
+          input.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
           return el('div', { class: 'card' },
             el('div', { class: 'card-title' }, badge(c.type, c.type === 'EEFI' ? 'red' : c.type === 'PIR' ? 'orange' : 'blue'), ' ' + c.label),
             itemsBox,
-            el('div', { class: 'flex', style: 'margin-top:8px' }, input, addBtn)
-          );
+            el('div', { class: 'flex', style: 'margin-top:8px' }, input, addBtn));
         })
       )
     ));
   };
 
-  // ----------------------------- HELPERS UI -------------------------------
+  // ============================================================
+  //   RETEX / AAR
+  // ============================================================
+  renderers.retex = (root) => {
+    root.appendChild(panel('RETEX — After-Action Review',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Méthode AAR US Army (4 questions). Capitalisation : Lessons Identified → Lessons Learned. Indispensable post-exercice et post-crise.'),
+        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
+          el('div', { class: 'muted' }, `${state.retex.length} retour(s) d\'expérience`),
+          el('button', { class: 'btn-primary', onclick: () => retexForm() }, '+ Nouveau RETEX')
+        ),
+        state.retex.length === 0 ? el('div', { class: 'empty' }, 'Aucun.')
+          : el('div', { class: 'cards' }, ...state.retex.map(r => el('div', { class: 'card' },
+              el('div', { class: 'flex-between' },
+                el('div', { class: 'card-title' }, r.title),
+                el('span', { class: 'mono', style: 'color:var(--muted)' }, fmtDTG(r.ts))),
+              el('div', { class: 'card-meta' }, 'Animateur : ' + (r.facilitator || '—')),
+              el('div', { class: 'card-body' },
+                el('div', {}, el('strong', {}, '1. Que devait-il se passer ? '), r.expected || '—'),
+                el('div', {}, el('strong', {}, '2. Que s\'est-il passé ? '), r.actual || '—'),
+                el('div', {}, el('strong', {}, '3. Pourquoi cette différence ? '), r.gap || '—'),
+                el('div', {}, el('strong', {}, '4. Que devons-nous améliorer / pérenniser ? '), r.improve || '—'),
+                r.lessons && r.lessons.length ? el('div', { style: 'margin-top:8px' },
+                  el('strong', {}, 'Lessons Identified : '),
+                  el('ul', { style: 'margin:4px 0' },
+                    ...r.lessons.map(l => el('li', {}, l)))) : null),
+              el('div', { class: 'card-actions' },
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => retexForm(r.id) }, 'Éditer'),
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => convertRetexToActions(r) }, '→ Créer actions LL'),
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.retex = state.retex.filter(x => x.id !== r.id); save(); setTab('retex'); } } }, '✕')))))
+      )
+    ));
+  };
+  function retexForm(idEdit) {
+    const r = idEdit ? state.retex.find(x => x.id === idEdit) : { lessons: [] };
+    const title = el('input', { value: r.title || '' });
+    const facilitator = el('input', { value: r.facilitator || currentUserName() });
+    const expected = el('textarea', { placeholder: 'Plan, intention, end-state attendu' }, r.expected || '');
+    const actual = el('textarea', { placeholder: 'Faits, chronologie réelle, résultats' }, r.actual || '');
+    const gap = el('textarea', { placeholder: 'Causes racines, frictions, surprises' }, r.gap || '');
+    const improve = el('textarea', { placeholder: 'Améliorations / pratiques à pérenniser' }, r.improve || '');
+    const lessonsTxt = el('textarea', { placeholder: 'Une leçon par ligne' }, (r.lessons || []).join('\n'));
+    const submit = () => {
+      const data = { id: r.id || id(), title: title.value, facilitator: facilitator.value,
+        expected: expected.value, actual: actual.value, gap: gap.value, improve: improve.value,
+        lessons: lessonsTxt.value.split('\n').map(x => x.trim()).filter(Boolean),
+        ts: r.ts || nowISO() };
+      if (idEdit) state.retex[state.retex.findIndex(x => x.id === idEdit)] = data;
+      else { state.retex.unshift(data); logMEL('INFO', `RETEX ouvert : ${data.title}`); }
+      save(); closeModal(); setTab('retex');
+    };
+    openModal(idEdit ? 'Éditer RETEX' : 'Nouveau RETEX (AAR)',
+      el('div', {},
+        twoCol('Titre', title, 'Animateur', facilitator),
+        field('1. Que devait-il se passer ?', expected),
+        field('2. Que s\'est-il passé ?', actual),
+        field('3. Pourquoi cette différence ?', gap),
+        field('4. Que devons-nous améliorer ou pérenniser ?', improve),
+        field('Lessons Identified (une par ligne)', lessonsTxt),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
+  }
+  function convertRetexToActions(r) {
+    if (!r.lessons || !r.lessons.length) { toast('Aucune leçon à convertir.', 'warn'); return; }
+    if (!confirm(`Créer ${r.lessons.length} actions à partir des Lessons Identified ?`)) return;
+    r.lessons.forEach(l => state.actions.push({
+      id: id(), text: `[LL] ${l}`, owner: '', priority: 'P3',
+      status: 'todo', due: '', createdAt: nowISO()
+    }));
+    logMEL('ACTION', `${r.lessons.length} actions créées depuis RETEX "${r.title}"`);
+    save(); setTab('actions');
+  }
+
+  // ============================================================
+  //   EXERCICES (MSEL)
+  // ============================================================
+  renderers.exercises = (root) => {
+    root.appendChild(panel('Exercices de crise — table-top et full-scale',
+      el('div', {},
+        el('p', { class: 'muted' }, 'L\'ASN impose un exercice annuel pour les sites nucléaires ; pratique recommandée pour la cellule maritime. MSEL = Master Scenario Events List : trame d\'injection chronologique pour entraîner la cellule.'),
+        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
+          el('div', { class: 'muted' }, `${state.exercises.length} exercice(s)`),
+          el('button', { class: 'btn-primary', onclick: () => exerciseForm() }, '+ Exercice')
+        ),
+        state.exercises.length === 0 ? el('div', { class: 'empty' }, 'Aucun exercice.')
+          : el('div', { class: 'cards' }, ...state.exercises.map(x => el('div', { class: 'card' },
+              el('div', { class: 'flex-between' },
+                el('div', { class: 'card-title' }, x.title),
+                badge(x.status, x.status === 'planned' ? 'blue' : x.status === 'running' ? 'orange' : 'green')),
+              el('div', { class: 'card-meta' }, `${x.type} · prévu ${fmtDTG(x.date)} · ${x.msel ? x.msel.length : 0} injection(s)`),
+              el('div', { class: 'card-body' }, x.scenario || '—'),
+              el('div', { class: 'card-actions' },
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => exerciseForm(x.id) }, 'Éditer'),
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => exerciseRun(x) }, '▶ Lancer'),
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.exercises = state.exercises.filter(e => e.id !== x.id); save(); setTab('exercises'); } } }, '✕')))))
+      )
+    ));
+  };
+  function exerciseForm(idEdit) {
+    const x = idEdit ? state.exercises.find(e => e.id === idEdit) : { type: 'Table-top', status: 'planned', msel: [] };
+    const title = el('input', { value: x.title || '' });
+    const type = el('select', {}, ...['Table-top','Functional','Full-scale'].map(t => el('option', { value: t, selected: x.type === t }, t)));
+    const status = el('select', {}, ...[['planned','Planifié'],['running','En cours'],['done','Clôturé']]
+      .map(([k, l]) => el('option', { value: k, selected: x.status === k }, l)));
+    const date = el('input', { type: 'datetime-local', value: x.date ? new Date(x.date).toISOString().slice(0, 16) : '' });
+    const scenario = el('textarea', { placeholder: 'Scénario d\'exercice : situation initiale, navires impliqués, contexte' }, x.scenario || '');
+    const mselTxt = el('textarea', { placeholder: 'Une injection par ligne, format : T+MM | événement | cible cellule' },
+      (x.msel || []).map(m => `${m.time} | ${m.event} | ${m.target}`).join('\n'));
+    const submit = () => {
+      const msel = mselTxt.value.split('\n').map(line => {
+        const parts = line.split('|').map(s => s.trim());
+        if (parts.length < 2) return null;
+        return { time: parts[0], event: parts[1] || '', target: parts[2] || '' };
+      }).filter(Boolean);
+      const data = { id: x.id || id(), title: title.value, type: type.value, status: status.value,
+        date: date.value ? new Date(date.value).toISOString() : '', scenario: scenario.value, msel };
+      if (idEdit) state.exercises[state.exercises.findIndex(e => e.id === idEdit)] = data;
+      else state.exercises.push(data);
+      save(); closeModal(); setTab('exercises');
+    };
+    openModal(idEdit ? 'Éditer exercice' : 'Nouvel exercice',
+      el('div', {},
+        twoCol('Titre', title, 'Type', type),
+        twoCol('Statut', status, 'Date', date),
+        field('Scénario', scenario),
+        field('MSEL — Master Scenario Events List', mselTxt),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
+  }
+  function exerciseRun(x) {
+    const msel = (x.msel || []).slice().sort((a, b) => a.time.localeCompare(b.time));
+    if (!msel.length) { toast('MSEL vide.', 'warn'); return; }
+    const lines = msel.map(m => `[${m.time}] → ${m.target} : ${m.event}`).join('\n');
+    alert(`Exercice "${x.title}" — trame d\'injection :\n\n${lines}\n\n(Le pilotage temps réel se fait par l\'animateur — ne crée pas d\'actions automatiques.)`);
+    x.status = 'running';
+    logMEL('INFO', `Exercice lancé : ${x.title}`);
+    save(); setTab('exercises');
+  }
+
+  // ============================================================
+  //   HELPERS UI
+  // ============================================================
   function panel(title, body, headerExtra) {
     return el('div', { class: 'panel' },
       el('div', { class: 'panel-header' },
         el('h2', {}, title),
-        headerExtra || null
-      ),
-      el('div', { class: 'panel-body' }, body)
-    );
+        headerExtra || null),
+      el('div', { class: 'panel-body' }, body));
   }
   function kpiTile(label, value, tone, sub) {
     return el('div', { class: 'kpi ' + (tone || '') },
       el('div', { class: 'kpi-label' }, label),
       el('div', { class: 'kpi-value' }, String(value)),
-      sub ? el('div', { class: 'kpi-sub' }, sub) : null
-    );
+      sub ? el('div', { class: 'kpi-sub' }, sub) : null);
   }
   function oodaStep(num, name, desc) {
     return el('div', { class: 'ooda-step' },
       el('div', { class: 'num' }, num),
       el('div', { class: 'name' }, name),
-      el('div', { class: 'desc' }, desc)
-    );
+      el('div', { class: 'desc' }, desc));
   }
   function badge(text, color) {
-    return el('span', { class: 'badge ' + (color || '') }, String(text));
+    return el('span', { class: 'badge ' + (color || '') }, String(text == null ? '' : text));
   }
   function severityColor(sev) {
     return sev === 'crit' ? 'red' : sev === 'high' ? 'orange' : sev === 'med' ? 'yellow' : 'green';
@@ -1271,19 +1963,18 @@
   function twoCol(l1, i1, l2, i2) {
     return el('div', { class: 'form-row cols-2' },
       el('div', {}, el('label', {}, l1), i1),
-      el('div', {}, el('label', {}, l2), i2)
-    );
+      el('div', {}, el('label', {}, l2), i2));
   }
   function tableEl(headers, rows) {
     return el('table', {},
       el('thead', {}, el('tr', {}, ...headers.map(h => el('th', {}, h)))),
       el('tbody', {}, ...rows.map(cells => el('tr', {}, ...cells.map(c =>
-        el('td', {}, typeof c === 'string' || typeof c === 'number' ? String(c) : c)
-      ))))
-    );
+        el('td', {}, c == null ? '' : (typeof c === 'string' || typeof c === 'number' ? String(c) : c)))))));
   }
 
-  // ----------------------------- IMPORT / EXPORT --------------------------
+  // ============================================================
+  //   IMPORT / EXPORT
+  // ============================================================
   function download(filename, text) {
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1293,75 +1984,77 @@
     setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
   }
   function exportJSON() {
-    const data = JSON.stringify(state, null, 2);
-    download(`crisiscell_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`, data);
+    if (!confirm('Exporter en CLAIR (déchiffré) ? L\'archive ne sera plus protégée par le mot de passe. Préférez "Export chiffré" pour partager.')) {
+      const enc = CrisisAuth.exportEncryptedBlob();
+      download(`crisiscell_encrypted_${new Date().toISOString().slice(0, 10)}.json`, enc);
+      toast('Export chiffré généré', 'ok');
+      return;
+    }
+    download(`crisiscell_clear_${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(state, null, 2));
+    toast('⚠ Export en clair — protégez le fichier', 'warn');
   }
   function importJSON(file) {
     const reader = new FileReader();
-    reader.onload = e => {
+    reader.onload = async ev => {
       try {
-        const data = JSON.parse(e.target.result);
-        state = Object.assign(defaultState(), data);
-        save();
-        applyAlertClass();
-        document.getElementById('alertSelect').value = state.alert;
-        document.getElementById('opsPeriod').value = state.opsPeriod || '';
-        setTab(currentTab);
-        alert('Import réussi.');
-      } catch (err) {
-        alert('Erreur import : ' + err.message);
-      }
+        const data = JSON.parse(ev.target.result);
+        if (data.schema === 'crisiscell.encrypted.v2') {
+          if (!confirm('Importer une archive chiffrée ? Le coffre courant sera remplacé. Vous devrez ensuite vous reconnecter avec le mot de passe d\'origine.')) return;
+          CrisisAuth.importEncryptedBlob(JSON.stringify(data));
+          alert('Archive importée. Reconnectez-vous.');
+          location.reload();
+        } else {
+          if (!confirm('Importer cet état (en clair) dans le coffre courant ?')) return;
+          state = Object.assign(defaultState(), data);
+          await CrisisAuth.saveState(state);
+          applyAlertClass();
+          $('#alertSelect').value = state.alert;
+          $('#opsPeriod').value = state.opsPeriod || '';
+          setTab(currentTab);
+          toast('Import réussi', 'ok');
+        }
+      } catch (e) { toast('Erreur import : ' + e.message, 'danger'); }
     };
     reader.readAsText(file);
   }
 
-  // ----------------------------- INIT -------------------------------------
-  function init() {
-    // Tabs binding
-    document.querySelectorAll('.tab').forEach(t => {
-      t.addEventListener('click', () => setTab(t.dataset.tab));
-    });
-    // Alert
-    const sel = document.getElementById('alertSelect');
-    sel.value = state.alert;
-    sel.addEventListener('change', () => {
-      state.alert = sel.value;
-      applyAlertClass();
-      logMEL('INFO', `Niveau d\'alerte changé : ${state.alert.toUpperCase()}`);
-      save();
-      if (currentTab === 'cop') setTab('cop');
-    });
-    applyAlertClass();
-    // Ops period
-    const ops = document.getElementById('opsPeriod');
-    ops.value = state.opsPeriod || '';
-    ops.addEventListener('change', () => { state.opsPeriod = ops.value; save(); });
-    // Modal close
-    document.getElementById('modalClose').addEventListener('click', closeModal);
-    document.getElementById('modal').addEventListener('click', e => {
-      if (e.target.id === 'modal') closeModal();
-    });
-    // Toolbar
-    document.getElementById('exportData').addEventListener('click', exportJSON);
-    document.getElementById('importData').addEventListener('click', () => document.getElementById('importFile').click());
-    document.getElementById('importFile').addEventListener('change', e => {
-      if (e.target.files[0]) importJSON(e.target.files[0]);
-    });
-    document.getElementById('resetAll').addEventListener('click', () => {
-      if (!confirm('Tout réinitialiser ? Toutes les données seront perdues.')) return;
-      state = defaultState();
-      save();
-      applyAlertClass();
-      document.getElementById('alertSelect').value = state.alert;
-      document.getElementById('opsPeriod').value = '';
-      setTab('cop');
-    });
-    // Clocks
-    tickClocks();
-    setInterval(tickClocks, 1000);
-    // Initial tab
-    setTab('cop');
+  // ============================================================
+  //   CHANGE PASSWORD
+  // ============================================================
+  function changePasswordDialog() {
+    const oldPwd = el('input', { type: 'password', autocomplete: 'current-password' });
+    const new1 = el('input', { type: 'password', autocomplete: 'new-password' });
+    const new2 = el('input', { type: 'password', autocomplete: 'new-password' });
+    const errBox = el('div');
+    const submit = async () => {
+      errBox.innerHTML = '';
+      if (new1.value !== new2.value) {
+        errBox.appendChild(el('div', { class: 'auth-error' }, 'Les nouveaux mots de passe ne correspondent pas.')); return;
+      }
+      try {
+        await CrisisAuth.changePassword(oldPwd.value, new1.value);
+        closeModal(); toast('Mot de passe modifié.', 'ok');
+        logMEL('SECURITY', 'Mot de passe coffre modifié');
+        save();
+      } catch (e) {
+        errBox.appendChild(el('div', { class: 'auth-error' }, e.message));
+      }
+    };
+    openModal('Changer le mot de passe',
+      el('div', {},
+        errBox,
+        field('Mot de passe actuel', oldPwd),
+        field('Nouveau mot de passe', new1),
+        field('Confirmer', new2),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
   }
 
+  // ============================================================
+  //   GO
+  // ============================================================
   document.addEventListener('DOMContentLoaded', init);
+  window.addEventListener('beforeunload', () => { saveSync(); });
 })();
