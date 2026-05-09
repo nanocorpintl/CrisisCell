@@ -29,8 +29,7 @@ inaccessibles sans le mot de passe.
 
 | Source | Apport |
 |---|---|
-| **ICS** (FEMA) | Rôles cellule (CMD/OPS/PLN/LOG/FIN/LIA/PIO/SAF/SEC) |
-| **OODA Loop** (Boyd, USAF) | Journal de décisions en 4 phases |
+| **ICS** (FEMA) | Principes d'organisation, simplifiés en 6 fonctions clés (DIR/OPS/COM/ANT/SUP/QRT) |
 | **NATO SITREP / OPORD** | Générateurs aux formats 5 paragraphes (SMEAC/OEEEAR) |
 | **CCIR / PIR / FFIR / EEFI** | Module dédié aux besoins informationnels |
 | **Battle rhythm** | Cadence des briefings, passation de quart |
@@ -47,13 +46,13 @@ inaccessibles sans le mot de passe.
 
 ## Modules (20)
 
-1. **COP** — Phase de cinétique, KPI, OODA, incidents actifs, anticipation H+24, MEL récent, **saisie rapide intégrée**.
+1. **COP** — Phase de cinétique, KPI, incidents actifs, anticipation H+24, MEL récent, **saisie rapide intégrée**.
 2. **Incidents** — création / suivi / clôture avec **niveau INES** (0-7), **niveau ROE** (1-5 BMP5), **Commander's Intent** et **End-State**.
 3. **Navires** — registre flotte (Normal / À risque / Incident / Sécurisé / Port refuge).
 4. **MEL** — Main Events Log horodaté UTC, immuable, exportable.
-5. **Cellule** — équipe d'astreinte avec rôles ICS adaptés (DPA, CSO, ANT, WRT).
+5. **Cellule** — équipe d'astreinte. Organisation simplifiée en 6 fonctions : **DIR** (Direction), **OPS** (Opérations navires, intègre DPA/CSO/HSE), **COM** (Communication), **ANT** (Anticipation), **SUP** (Soutien : juridique/HR/IT/logistique), **QRT** (Officier de quart).
 6. **Actions** — P1/P2/P3, owner, échéance, **clic sur statut pour cycle**.
-7. **Décisions** — boucle OODA tracée.
+7. **Décisions** — journal des décisions (contexte / décision / mise en œuvre).
 8. **Anticipation** — *cellule prospective REX nucléaire* H+6/24/72 best/likely/worst + signaux à surveiller.
 9. **Comms** — entrantes/sortantes, **validation single-voice** (REX EDF/Marine).
 10. **Contacts** — annuaire P1/P2/P3 (MRCC, UKMTO, MDAT-GoG, P&I…).
