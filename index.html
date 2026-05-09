@@ -40,53 +40,75 @@
     <div class="brand-logo">CC</div>
     <div class="brand-text">
       <div class="brand-title">CrisisCell</div>
-      <div class="brand-sub">CMA Ships — Cellule de Crise Maritime</div>
+      <div class="brand-sub">CMA Ships</div>
     </div>
   </div>
   <div class="status-strip">
     <div class="alert-level" id="alertLevel">
       <span class="alert-dot"></span>
       <select id="alertSelect" aria-label="Niveau d'alerte">
-        <option value="green">VERT — Veille normale</option>
-        <option value="yellow">JAUNE — Vigilance renforcée</option>
-        <option value="orange">ORANGE — Pré-alerte cellule</option>
-        <option value="red">ROUGE — Cellule de crise activée</option>
-        <option value="black">NOIR — Crise majeure / continuité</option>
+        <option value="green">Vert — Veille</option>
+        <option value="yellow">Jaune — Vigilance</option>
+        <option value="orange">Orange — Pré-alerte</option>
+        <option value="red">Rouge — Cellule activée</option>
+        <option value="black">Noir — Crise majeure</option>
       </select>
     </div>
     <div class="utc-clock"><span class="lbl">UTC</span><span id="utcClock">--:--:--</span></div>
-    <div class="local-clock"><span class="lbl">LOCAL</span><span id="localClock">--:--:--</span></div>
-    <div class="ops-period"><span class="lbl">OPS PERIOD</span><input id="opsPeriod" placeholder="ex. 24H06-24H18" autocomplete="off" /></div>
     <div class="user-chip" id="userChip" title="Utilisateur connecté"></div>
-    <button class="btn-ghost" id="helpBtn" title="Raccourcis (?)">?</button>
-    <button class="btn-ghost" id="exportData" title="Export JSON déchiffré">⬇</button>
-    <button class="btn-ghost" id="importData" title="Import">⬆</button>
-    <input type="file" id="importFile" accept=".json" hidden />
-    <button class="btn-ghost" id="changePwdBtn" title="Changer de mot de passe">🔑</button>
-    <button class="btn-warn" id="lockBtn" title="Verrouiller (Ctrl+L)">🔒</button>
-    <button class="btn-danger" id="resetAll" title="Réinitialiser (efface tout)">⟲</button>
+    <button class="btn-ghost icon-btn" id="lockBtn" title="Verrouiller (Ctrl+L)">🔒</button>
+    <div class="menu-wrap">
+      <button class="btn-ghost icon-btn" id="menuBtn" title="Plus" aria-haspopup="true">···</button>
+      <div class="menu-pop" id="menuPop" hidden>
+        <button id="helpBtn">⌨ Raccourcis (?)</button>
+        <button id="exportData">⬇ Exporter</button>
+        <button id="importData">⬆ Importer</button>
+        <input type="file" id="importFile" accept=".json" hidden />
+        <button id="changePwdBtn">🔑 Changer le mot de passe</button>
+        <div class="menu-sep"></div>
+        <button id="opsPeriodBtn">📅 OPS Period…</button>
+        <div class="menu-sep"></div>
+        <button id="resetAll" class="danger">⟲ Tout réinitialiser</button>
+      </div>
+    </div>
   </div>
 </header>
 
 <nav class="tabs" role="tablist">
+  <span class="tab-group">Suivi</span>
   <button class="tab active" data-tab="cop">COP</button>
   <button class="tab" data-tab="incidents">Incidents</button>
   <button class="tab" data-tab="vessels">Navires</button>
   <button class="tab" data-tab="mel">MEL</button>
-  <button class="tab" data-tab="team">Cellule</button>
+
+  <span class="tab-sep"></span>
+  <span class="tab-group">Action</span>
   <button class="tab" data-tab="actions">Actions</button>
   <button class="tab" data-tab="decisions">Décisions</button>
   <button class="tab" data-tab="anticipation">Anticipation</button>
+
+  <span class="tab-sep"></span>
+  <span class="tab-group">Cellule</span>
+  <button class="tab" data-tab="team">Cellule</button>
   <button class="tab" data-tab="comms">Comms</button>
   <button class="tab" data-tab="stakeholders">Contacts</button>
   <button class="tab" data-tab="resources">Ressources</button>
-  <button class="tab" data-tab="risk">Risques</button>
-  <button class="tab" data-tab="rhythm">Battle rhythm</button>
+  <button class="tab" data-tab="rhythm">Rythme</button>
   <button class="tab" data-tab="passation">Passation</button>
+
+  <span class="tab-sep"></span>
+  <span class="tab-group">Reporting</span>
   <button class="tab" data-tab="sitrep">SITREP</button>
   <button class="tab" data-tab="opord">OPORD</button>
+
+  <span class="tab-sep"></span>
+  <span class="tab-group">Plans</span>
   <button class="tab" data-tab="playbooks">Playbooks</button>
+  <button class="tab" data-tab="risk">Risques</button>
   <button class="tab" data-tab="ccir">CCIR</button>
+
+  <span class="tab-sep"></span>
+  <span class="tab-group">Capitalisation</span>
   <button class="tab" data-tab="retex">RETEX</button>
   <button class="tab" data-tab="exercises">Exercices</button>
 </nav>
