@@ -2,7 +2,7 @@
  * - Persistance chiffrée AES-GCM via CrisisAuth (window.CrisisAuth)
  * - UX accélérée : raccourcis clavier, FAB, auto-focus, datalists, Ctrl+Entrée
  * - Modules doctrinaux maritimes / militaires / nucléaire :
- *   COP, Incidents, Navires, MEL, Cellule, Actions, Décisions OODA,
+ *   COP, Incidents, Navires, MEL, Cellule, Actions, Décisions,
  *   Anticipation H+6/24/72, Comms, Contacts, Ressources, Risques,
  *   Battle rhythm, Passation de quart, SITREP, OPORD, Playbooks,
  *   CCIR, RETEX (AAR), Exercices (MSEL).
@@ -138,7 +138,7 @@
     }
 
     const errBox = el('div');
-    const userInput = el('input', { type: 'text', placeholder: 'Ex. CMD jdupont', autocomplete: 'off', maxlength: 64 });
+    const userInput = el('input', { type: 'text', placeholder: 'Ex. DIR jdupont', autocomplete: 'off', maxlength: 64 });
     const pwd1 = el('input', { type: 'password', autocomplete: 'new-password', minlength: 12 });
     const pwd2 = el('input', { type: 'password', autocomplete: 'new-password' });
     const meterBar = el('div', { class: 'pwd-bar' });
@@ -759,7 +759,7 @@
     const status = el('select', {}, ...['open','monitoring','closed'].map(s => el('option', { value: s, selected: inc.status === s }, s)));
     const startedAt = el('input', { type: 'datetime-local', value: inc.startedAt ? new Date(inc.startedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16) });
     const summary = el('textarea', { placeholder: '5W : Who, What, Where, When, Why' }, inc.summary || '');
-    const intent = el('textarea', { placeholder: 'Intention du Crisis Manager — résultat à atteindre, contraintes' }, inc.intent || '');
+    const intent = el('textarea', { placeholder: 'Intention de la Direction de crise — résultat à atteindre, contraintes' }, inc.intent || '');
     const endState = el('textarea', { placeholder: 'État final recherché (end-state) : indicateurs de fin de crise' }, inc.endState || '');
 
     const submit = () => {
@@ -794,7 +794,7 @@
       twoCol('Niveau INES', ines, 'Niveau ROE', roe),
       twoCol('Statut', status, 'Date début', startedAt),
       field('Résumé (5W)', summary),
-      field('Intention du Crisis Manager', intent),
+      field('Intention de la Direction de crise', intent),
       field('End-state (situation finale recherchée)', endState),
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Mettre à jour' : 'Créer'),
@@ -915,7 +915,7 @@
     root.appendChild(panel('Cellule de crise',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Rôles ICS adaptés maritime — DPA, CSO, ANT (Anticipation), WRT (Watch)'),
+          el('div', { class: 'muted' }, 'Organisation simplifiée — 6 fonctions clés. Plusieurs personnes peuvent partager une fonction (binôme, relève).'),
           el('button', { class: 'btn-primary', onclick: () => teamForm() }, '+ Ajouter')
         ),
         state.team.length === 0
@@ -942,7 +942,7 @@
   };
   function roleName(code) { const r = window.ROLES.find(x => x.code === code); return r ? r.name : code; }
   function teamForm(idEdit) {
-    const m = idEdit ? state.team.find(x => x.id === idEdit) : { role: 'CMD', online: true };
+    const m = idEdit ? state.team.find(x => x.id === idEdit) : { role: 'DIR', online: true };
     const role = el('select', {}, ...window.ROLES.map(r => el('option', { value: r.code, selected: m.role === r.code }, `[${r.code}] ${r.name}`)));
     const name = el('input', { value: m.name || '' });
     const contact = el('input', { value: m.contact || '' });
@@ -1042,48 +1042,56 @@
   }
 
   // ============================================================
-  //   DECISIONS — OODA
+  //   DECISIONS
   // ============================================================
   renderers.decisions = (root) => {
-    root.appendChild(panel('Décisions — boucle OODA',
+    root.appendChild(panel('Journal des décisions',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Trace OODA : Observe / Orient / Decide / Act + intention.'),
+          el('div', { class: 'muted' }, 'Tracer chaque décision avec son contexte, son contenu et sa mise en œuvre.'),
           el('button', { class: 'btn-primary', onclick: () => decisionForm() }, '+ Décision (d)')
         ),
         state.decisions.length === 0 ? el('div', { class: 'empty' }, 'Aucune décision.')
-          : el('div', { class: 'cards' }, ...state.decisions.map(d =>
-            el('div', { class: 'card' },
-              el('div', { class: 'flex-between' },
-                el('div', { class: 'card-title' }, d.title),
-                el('div', {}, badge(d.status, d.status === 'executed' ? 'green' : d.status === 'rejected' ? 'red' : 'orange'),
-                  ' ', el('span', { class: 'mono', style: 'color:var(--muted)' }, fmtDTG(d.ts)))),
-              el('div', { class: 'card-meta' }, `Décideur : ${d.decider || '—'}`),
-              el('div', { class: 'card-body' },
-                el('div', {}, el('strong', {}, '👁 Observe : '), d.observe || '—'),
-                el('div', {}, el('strong', {}, '🧭 Orient : '), d.orient || '—'),
-                el('div', {}, el('strong', {}, '⚖ Decide : '), d.decide || '—'),
-                el('div', {}, el('strong', {}, '⚡ Act : '), d.act || '—')),
-              el('div', { class: 'card-actions' },
-                el('button', { class: 'btn-ghost btn-sm', onclick: () => decisionForm(d.id) }, 'Éditer'),
-                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.decisions = state.decisions.filter(x => x.id !== d.id); save(); setTab('decisions'); } } }, '✕')
-              ))))
+          : el('div', { class: 'cards' }, ...state.decisions.map(d => {
+              // Compatibilité ascendante : d'anciennes entrées peuvent contenir
+              // les champs Observe/Orient/Decide/Act ; on les agrège en
+              // contexte/décision/mise en œuvre s'ils sont présents.
+              const ctx = d.context || [d.observe, d.orient].filter(Boolean).join('\n');
+              const dec = d.decision || d.decide || '';
+              const exec = d.execution || d.act || '';
+              return el('div', { class: 'card' },
+                el('div', { class: 'flex-between' },
+                  el('div', { class: 'card-title' }, d.title),
+                  el('div', {}, badge(d.status, d.status === 'executed' ? 'green' : d.status === 'rejected' ? 'red' : 'orange'),
+                    ' ', el('span', { class: 'mono', style: 'color:var(--muted)' }, fmtDTG(d.ts)))),
+                el('div', { class: 'card-meta' }, `Décideur : ${d.decider || '—'}`),
+                el('div', { class: 'card-body' },
+                  el('div', {}, el('strong', {}, 'Contexte : '), ctx || '—'),
+                  el('div', {}, el('strong', {}, 'Décision : '), dec || '—'),
+                  el('div', {}, el('strong', {}, 'Mise en œuvre : '), exec || '—')),
+                el('div', { class: 'card-actions' },
+                  el('button', { class: 'btn-ghost btn-sm', onclick: () => decisionForm(d.id) }, 'Éditer'),
+                  el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.decisions = state.decisions.filter(x => x.id !== d.id); save(); setTab('decisions'); } } }, '✕')
+                ));
+            }))
       )
     ));
   };
   function decisionForm(idEdit) {
     const d = idEdit ? state.decisions.find(x => x.id === idEdit) : { status: 'pending' };
+    const initCtx = d.context || [d.observe, d.orient].filter(Boolean).join('\n');
+    const initDec = d.decision || d.decide || '';
+    const initExec = d.execution || d.act || '';
     const title = el('input', { value: d.title || '' });
     const decider = el('input', { value: d.decider || currentUserName() });
-    const observe = el('textarea', { placeholder: 'Faits, sources, COP' }, d.observe || '');
-    const orient = el('textarea', { placeholder: 'Analyse, options, contraintes' }, d.orient || '');
-    const decide = el('textarea', { placeholder: 'Option retenue + justification' }, d.decide || '');
-    const act = el('textarea', { placeholder: 'Plan, qui, quoi, quand' }, d.act || '');
+    const context = el('textarea', { placeholder: 'Situation, faits motivant la décision, options envisagées' }, initCtx);
+    const decision = el('textarea', { placeholder: 'Décision retenue + justification' }, initDec);
+    const execution = el('textarea', { placeholder: 'Mise en œuvre : qui, quoi, quand' }, initExec);
     const status = el('select', {}, ...[['pending','Attente'],['executed','Exécutée'],['rejected','Rejetée']]
       .map(([k, l]) => el('option', { value: k, selected: d.status === k }, l)));
     const submit = () => {
       const data = { id: d.id || id(), title: title.value, decider: decider.value,
-        observe: observe.value, orient: orient.value, decide: decide.value, act: act.value,
+        context: context.value, decision: decision.value, execution: execution.value,
         status: status.value, ts: d.ts || nowISO() };
       if (idEdit) state.decisions[state.decisions.findIndex(x => x.id === idEdit)] = data;
       else { state.decisions.unshift(data); logMEL('DECISION', `Décision : ${data.title} (${data.status})`); }
@@ -1092,8 +1100,9 @@
     openModal(idEdit ? 'Éditer décision' : 'Nouvelle décision',
       el('div', {},
         twoCol('Titre', title, 'Décideur', decider),
-        field('👁 Observe', observe), field('🧭 Orient', orient),
-        field('⚖ Decide', decide), field('⚡ Act', act),
+        field('Contexte', context),
+        field('Décision', decision),
+        field('Mise en œuvre', execution),
         field('Statut', status),
         el('div', { class: 'flex', style: 'margin-top:14px' },
           el('button', { class: 'btn-primary', onclick: submit }, 'Tracer'),
@@ -1174,7 +1183,7 @@
     root.appendChild(panel('Communications',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Single voice principle (REX EDF/Marine) — toute comm externe validée par le CMD.'),
+          el('div', { class: 'muted' }, 'Single voice principle (REX EDF/Marine) — toute comm externe validée par DIR ou COM.'),
           el('button', { class: 'btn-primary', onclick: () => commsForm() }, '+ Comm (k)')
         ),
         state.comms.length === 0 ? el('div', { class: 'empty' }, 'Aucune comm.')
@@ -1197,7 +1206,7 @@
     const subject = el('input', {});
     const body = el('textarea', {});
     const validated = el('input', { type: 'checkbox' });
-    const validatedBy = el('input', { placeholder: 'Nom du validateur (CMD/PIO)' });
+    const validatedBy = el('input', { placeholder: 'Nom du validateur (DIR/COM)' });
     const submit = () => {
       state.comms.unshift({
         id: id(), ts: nowISO(),
@@ -1571,7 +1580,7 @@
       assessment: el('textarea', { placeholder: 'Évolution attendue (best/likely/worst)' }),
       requests: el('textarea', { placeholder: 'Ressources / support requis' }),
       next: el('input', { value: '+6H' }),
-      signature: el('input', { value: currentUserName() + ' — Crisis Manager' })
+      signature: el('input', { value: currentUserName() + ' — Direction de crise' })
     };
     const preview = el('pre', { class: 'sitrep-preview' }, '— Cliquez "Générer" —');
     const buildBtn = el('button', { class: 'btn-primary', onclick: () => {
@@ -1626,7 +1635,7 @@
         ` - ${v.name} (IMO ${v.imo || '-'}) — ${v.status.toUpperCase()} — pos ${v.position || '-'}`)))
       .replace('{ACTIONS_DONE}', fmtList(actsDone.map(a => ` - [${a.priority}] ${a.text} (${a.owner})`)))
       .replace('{ACTIONS_PLANNED}', fmtList(actsPlan.map(a => ` - [${a.priority}] ${a.text} — ${a.owner}, due ${fmtDTG(a.due)}`)))
-      .replace('{DECISIONS}', fmtList(decisions.map(d => ` - ${d.title} — ${d.decide || '(en cours)'} (${d.status})`)))
+      .replace('{DECISIONS}', fmtList(decisions.map(d => ` - ${d.title} — ${(d.decision || d.decide) || '(en cours)'} (${d.status})`)))
       .replace('{ASSESSMENT}', inputs.assessment.value || '-')
       .replace('{REQUESTS}', inputs.requests.value || 'Néant.')
       .replace('{NEXT_SITREP}', inputs.next.value || '+6H')
@@ -1639,14 +1648,14 @@
   renderers.opord = (root) => {
     const inputs = {
       classif: el('select', {}, ...['NON CLASSIFIÉ','DIFFUSION RESTREINTE','CONFIDENTIEL'].map(c => el('option', { value: c }, c))),
-      issuer: el('input', { value: currentUserName() + ' — Crisis Manager' }),
+      issuer: el('input', { value: currentUserName() + ' — Direction de crise' }),
       dest: el('input', { value: 'Cellule de crise CMA Ships' }),
       ref: el('input', { placeholder: 'SITREP n°x du DTG…' }),
       sitContext: el('textarea', { placeholder: 'Menace / contexte / météo / cinétique' }),
       sitFriendly: el('textarea', { placeholder: 'Forces amies, ressources mobilisées' }),
       sitAssumptions: el('textarea', { placeholder: 'Hypothèses retenues' }),
       mission: el('textarea', { placeholder: 'QUI fait QUOI, QUAND, OÙ, et POURQUOI' }),
-      intent: el('textarea', { placeholder: 'Intention du Crisis Manager — résultat à atteindre' }),
+      intent: el('textarea', { placeholder: 'Intention de la Direction de crise — résultat à atteindre' }),
       concept: el('textarea', { placeholder: 'Concept d\'opération' }),
       endState: el('textarea', { placeholder: 'État final recherché' }),
       nogo: el('textarea', { placeholder: 'No-go criteria : conditions d\'arrêt' }),
@@ -1680,7 +1689,7 @@
         el('h4', {}, '2. Mission'),
         field('Mission (5W)', inputs.mission),
         el('h4', {}, '3. Exécution'),
-        field('Intention du Crisis Manager', inputs.intent),
+        field('Intention de la Direction de crise', inputs.intent),
         field('Concept d\'opération', inputs.concept),
         field('End-state', inputs.endState),
         field('No-go criteria', inputs.nogo),
@@ -1786,7 +1795,7 @@
   //   CCIR
   // ============================================================
   renderers.ccir = (root) => {
-    root.appendChild(panel('CCIR — informations critiques pour le Crisis Manager',
+    root.appendChild(panel('CCIR — informations critiques pour la Direction de crise',
       el('div', {},
         el('p', { class: 'muted' }, 'PIR (renseignement prioritaire), FFIR (état force amie), EEFI (à NE PAS divulguer).'),
         ...state.ccir.map(c => {
@@ -1971,12 +1980,6 @@
       el('div', { class: 'kpi-label' }, label),
       el('div', { class: 'kpi-value' }, String(value)),
       sub ? el('div', { class: 'kpi-sub' }, sub) : null);
-  }
-  function oodaStep(num, name, desc) {
-    return el('div', { class: 'ooda-step' },
-      el('div', { class: 'num' }, num),
-      el('div', { class: 'name' }, name),
-      el('div', { class: 'desc' }, desc));
   }
   function badge(text, color) {
     return el('span', { class: 'badge ' + (color || '') }, String(text == null ? '' : text));

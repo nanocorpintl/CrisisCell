@@ -1,5 +1,5 @@
 // Playbooks maritimes — inspirés ISM Code, IMO A.1072(28), BMP5, SOLAS, ISPS,
-// guidelines militaires (OODA, SALUTE, MEDEVAC 9-line) et bonnes pratiques civiles.
+// guidelines militaires (SALUTE, MEDEVAC 9-line) et bonnes pratiques civiles.
 // Ce sont des canevas synthétiques à adapter aux procédures CMA Ships.
 
 window.PLAYBOOKS = [
@@ -247,7 +247,7 @@ OPS PERIOD   : {OPS}
 5. ACTIONS EN COURS / A VENIR
 {ACTIONS_PLANNED}
 
-6. DECISIONS CLES (OODA)
+6. DECISIONS CLES
 {DECISIONS}
 
 7. EVALUATION RISQUE / EVOLUTION ATTENDUE
@@ -381,22 +381,20 @@ window.HANDOVER_CHECKLIST = [
   'Documents et coordonnées partagés (canal, lien, classification)'
 ];
 
-// Rôles cellule de crise — inspirés ICS + organisation maritime
+// Organisation simplifiée de la cellule — 6 fonctions clés.
+// Une fonction = une responsabilité claire ; plusieurs personnes peuvent
+// être affectées sous une même fonction (binôme jour/nuit, expert, etc.).
 window.ROLES = [
-  { code: 'CMD', name: 'Crisis Manager / Incident Commander', desc: 'Pilote la cellule, valide décisions stratégiques' },
-  { code: 'DCMD', name: 'Deputy / Battle Captain', desc: 'Battle rhythm, suit l\'exécution, relai 24/7' },
-  { code: 'OPS', name: 'Operations / DPA', desc: 'Designated Person Ashore — pilote opérationnel navires' },
-  { code: 'PLN', name: 'Planning Officer', desc: 'COP, anticipation, ordres, SITREP' },
-  { code: 'LOG', name: 'Logistics', desc: 'Ressources, contrats salvage, agences, équipage' },
-  { code: 'FIN', name: 'Finance / Admin', desc: 'Budget de crise, contrats, P&I, tracabilité' },
-  { code: 'LIA', name: 'Liaison Officer', desc: 'Interface autorités, État pavillon, MRCC, clients' },
-  { code: 'PIO', name: 'Public Information Officer', desc: 'Communication externe, presse, single voice' },
-  { code: 'LEG', name: 'Legal Counsel', desc: 'Juridique, contentieux, déclaration mer' },
-  { code: 'SAF', name: 'Safety / HSE', desc: 'Veille sécurité personnes, environnement' },
-  { code: 'SEC', name: 'Security / CSO', desc: 'Company Security Officer, sûreté, ISPS' },
-  { code: 'IT',  name: 'Cyber / IT Lead', desc: 'Cellule cyber, comms, outillage SI' },
-  { code: 'HR',  name: 'HR / Familles', desc: 'Cellule familles, soutien psy, RH équipage' },
-  { code: 'TEC', name: 'Technical / Superintendent', desc: 'Expertise navire, classification, chantiers' },
-  { code: 'ANT', name: 'Cellule Anticipation',     desc: 'Prospective H+6/24/72, scénarios best/likely/worst (REX nucléaire)' },
-  { code: 'WRT', name: 'Watch / Battle Captain rotation', desc: 'Officier de quart 24/7, passation formelle' }
+  { code: 'DIR', name: 'Direction de crise',
+    desc: 'Pilote la cellule, valide les décisions stratégiques et la communication externe.' },
+  { code: 'OPS', name: 'Cellule Opérations',
+    desc: 'Pilotage opérationnel des navires (DPA, technique, sûreté CSO, HSE). Lien avec le bord.' },
+  { code: 'COM', name: 'Cellule Communication',
+    desc: 'Communication interne, externe, presse, familles, autorités. Single voice.' },
+  { code: 'ANT', name: 'Cellule Anticipation',
+    desc: 'Prospective H+6/24/72, scénarios best/likely/worst, signaux faibles.' },
+  { code: 'SUP', name: 'Cellule Soutien',
+    desc: 'Juridique (P&I, contentieux), HR, logistique, IT/cyber, finance, agences.' },
+  { code: 'QRT', name: 'Officier de quart',
+    desc: 'Astreinte 24/7, journal MEL, passations, relais nuit/jour.' }
 ];
