@@ -291,9 +291,22 @@
       if (currentTab === 'cop') setTab('cop');
     });
     applyAlertClass();
-    const ops = $('#opsPeriod');
-    ops.value = state.opsPeriod || '';
-    ops.addEventListener('change', () => { state.opsPeriod = ops.value; save(); });
+    $('#opsPeriodBtn').addEventListener('click', opsPeriodDialog);
+    // Menu déroulant "···"
+    $('#menuBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pop = $('#menuPop');
+      pop.hidden = !pop.hidden;
+    });
+    document.addEventListener('click', (e) => {
+      const pop = $('#menuPop');
+      if (!pop || pop.hidden) return;
+      if (!pop.contains(e.target) && e.target.id !== 'menuBtn') pop.hidden = true;
+    });
+    // Au clic d'un élément du menu, on referme
+    $('#menuPop').querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => { $('#menuPop').hidden = true; });
+    });
     $('#modalClose').addEventListener('click', closeModal);
     $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
     $('#helpBtn').addEventListener('click', () => $('#helpModal').classList.remove('hidden'));
@@ -341,7 +354,18 @@
     const now = new Date();
     const pad = n => String(n).padStart(2, '0');
     const utc = $('#utcClock'); if (utc) utc.textContent = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
-    const lcl = $('#localClock'); if (lcl) lcl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+  function opsPeriodDialog() {
+    const inp = el('input', { value: state.opsPeriod || '', placeholder: 'ex. 24H06-24H18' });
+    const submit = () => { state.opsPeriod = inp.value.trim(); save(); closeModal(); toast('OPS period mis à jour', 'ok'); };
+    openModal('Période opérationnelle',
+      el('div', { class: 'simple-dialog' },
+        el('p', { class: 'muted' }, 'Plage horaire de l\'OPS Period courante (apparaît dans les SITREP).'),
+        inp,
+        el('div', { class: 'flex' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
   }
 
   // ============================================================
@@ -566,25 +590,47 @@
     const openActions = state.actions.filter(a => a.status !== 'done').length;
     const phase = (window.CRISIS_PHASES.find(p => p.code === state.phase) || window.CRISIS_PHASES[0]);
 
-    root.appendChild(panel('Phase de cinétique de crise',
-      el('div', {},
-        el('div', { class: 'flex', style: 'gap:6px;margin-bottom:8px' },
-          ...window.CRISIS_PHASES.map(p =>
-            el('button', {
-              class: state.phase === p.code ? 'btn-primary btn-sm' : 'btn-ghost btn-sm',
-              onclick: () => { state.phase = p.code; logMEL('INFO', 'Phase passée à ' + p.label); save(); setTab('cop'); }
-            }, p.label)
-          )
-        ),
-        el('div', { class: 'muted' }, phase.desc),
-        state.phase === 'reflex' ? el('div', { class: 'auth-warn', style: 'margin-top:10px' },
-          '⚠ Phase RÉFLEXE — règle des 3R : RECULER (mise en sécurité), RENDRE COMPTE (alerte hiérarchie), RÉFLÉCHIR (analyse avant action). Décisions par procédure et délégation.'
-        ) : null
-      )
+    // En-tête : pill phase + KPIs alignés (sans gros bandeau)
+    const phasePillWrap = el('div', { style: 'position:relative;display:inline-block' });
+    const phasePill = el('div', { class: 'phase-pill ' + state.phase, onclick: (e) => {
+      e.stopPropagation();
+      const existing = phasePillWrap.querySelector('.phase-popover');
+      if (existing) { existing.remove(); return; }
+      const pop = el('div', { class: 'phase-popover' },
+        ...window.CRISIS_PHASES.map(p => el('button', { onclick: () => {
+          state.phase = p.code;
+          logMEL('INFO', 'Phase passée à ' + p.label);
+          save(); setTab('cop');
+        } },
+          el('span', {}, p.label),
+          el('span', { class: 'desc' }, p.desc)))
+      );
+      phasePillWrap.appendChild(pop);
+      const off = (ev) => {
+        if (!phasePillWrap.contains(ev.target)) { pop.remove(); document.removeEventListener('click', off); }
+      };
+      setTimeout(() => document.addEventListener('click', off), 10);
+    } },
+      el('span', { class: 'dot' }),
+      el('span', {}, 'Phase ' + phase.label),
+      el('span', { class: 'muted', style: 'margin-left:4px' }, '▾')
+    );
+    phasePillWrap.appendChild(phasePill);
+
+    root.appendChild(el('div', { class: 'flex', style: 'gap:10px;align-items:center' },
+      phasePillWrap,
+      state.opsPeriod ? el('div', { class: 'muted', style: 'font-size:12px' }, '· OPS ' + state.opsPeriod) : null
     ));
 
+    if (state.phase === 'reflex') {
+      root.appendChild(el('div', { class: 'banner-3r' },
+        el('span', {}, '⚠'),
+        el('span', {}, el('strong', {}, '3R : '), 'Reculer · Rendre compte · Réfléchir — décisions par procédure.')
+      ));
+    }
+
     const kpis = el('div', { class: 'grid-4' },
-      kpiTile('Niveau d\'alerte', state.alert.toUpperCase(),
+      kpiTile('Alerte', state.alert.toUpperCase(),
         ['red','black'].includes(state.alert) ? 'danger' : ['orange','yellow'].includes(state.alert) ? 'warn' : 'ok'),
       kpiTile('Incidents actifs', activeIncidents.length, activeIncidents.length ? 'danger' : 'ok'),
       kpiTile('Navires impactés', vesselsAtRisk.length, vesselsAtRisk.length ? 'warn' : 'ok'),
@@ -607,21 +653,9 @@
     qbText.addEventListener('keydown', e => {
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); qbBtn.click(); }
     });
-    root.appendChild(panel('Saisie rapide — Main Events Log',
-      el('div', { class: 'quickbar' },
-        qbCat, qbAuthor, qbText, qbBtn,
-        el('div', { class: 'qb-hint' }, 'Raccourci : touche L pour focus rapide. Ctrl+Entrée pour envoyer.')
-      )
-    ));
-
-    // OODA visuel
-    root.appendChild(panel('Boucle OODA — Boyd',
-      el('div', { class: 'ooda' },
-        oodaStep('1', 'Observe', 'Collecter : COP, navire, météo, autorités'),
-        oodaStep('2', 'Orient', 'Analyser : METT-TC maritime, contexte, options'),
-        oodaStep('3', 'Decide', 'Choisir option, intention claire'),
-        oodaStep('4', 'Act', 'Exécuter, mesurer, reboucler')
-      )
+    root.appendChild(el('div', { class: 'quickbar' },
+      qbCat, qbAuthor, qbText, qbBtn,
+      el('div', { class: 'qb-hint' }, 'L : focus rapide · Ctrl+Entrée : envoyer')
     ));
 
     root.appendChild(el('div', { class: 'grid-2' },
@@ -702,16 +736,14 @@
               )
             ])
           )
-      )
-    ));
-    // Échelle de gravité maritime
-    root.appendChild(panel('Échelle de gravité maritime (adaptée INES)',
-      tableEl(['Niveau', 'Label', 'Description'],
-        window.SEVERITY_SCALE.map(s => [
-          badge(s.level, s.level >= 5 ? 'red' : s.level >= 3 ? 'orange' : 'green'),
-          el('strong', {}, s.label),
-          s.desc
-        ]))
+      ),
+      el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+        openModal('Échelle de gravité (adaptée INES)',
+          tableEl(['Niv.', 'Label', 'Description'],
+            window.SEVERITY_SCALE.map(s => [
+              badge(s.level, s.level >= 5 ? 'red' : s.level >= 3 ? 'orange' : 'green'),
+              el('strong', {}, s.label), s.desc])));
+      } }, 'ⓘ Échelle INES')
     ));
   };
   function incidentForm(idEdit) {
@@ -2009,7 +2041,6 @@
           await CrisisAuth.saveState(state);
           applyAlertClass();
           $('#alertSelect').value = state.alert;
-          $('#opsPeriod').value = state.opsPeriod || '';
           setTab(currentTab);
           toast('Import réussi', 'ok');
         }

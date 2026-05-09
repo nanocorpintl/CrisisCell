@@ -679,3 +679,191 @@ body:not(.locked) .auth-overlay { display: none; }
   from { transform: translateY(20px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
+
+/* ============================================================ */
+/*   SIMPLIFICATION VISUELLE — surcharges des règles précédentes */
+/* ============================================================ */
+
+/* Top bar : moins haute, moins de contraste */
+.topbar { padding: 8px 16px; }
+.brand-logo { width: 34px; height: 34px; font-size: 14px; }
+.brand-title { font-size: 15px; }
+.brand-sub {
+  font-size: 11px; letter-spacing: .5px;
+  text-transform: none; color: var(--muted);
+}
+.status-strip { gap: 8px; }
+.status-strip .lbl {
+  text-transform: none; letter-spacing: 0; font-size: 10px; opacity: .7;
+}
+.utc-clock, .local-clock {
+  padding: 4px 8px; font-size: 12px;
+}
+.icon-btn {
+  width: 34px; height: 34px; padding: 0;
+  display: inline-grid; place-items: center;
+  font-size: 15px;
+}
+
+/* Menu déroulant "···" */
+.menu-wrap { position: relative; }
+.menu-pop {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 220px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.5);
+  padding: 6px;
+  z-index: 60;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.menu-pop button {
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.menu-pop button:hover { background: rgba(255,255,255,.06); }
+.menu-pop button.danger { color: #ff8a7d; }
+.menu-pop button.danger:hover { background: rgba(231,76,60,.15); }
+.menu-sep {
+  height: 1px; background: var(--border); margin: 4px 0;
+}
+
+/* Onglets : moins de bruit, séparateurs visuels */
+.tabs {
+  padding: 0 14px; gap: 0;
+  align-items: center;
+  height: 44px;
+}
+.tab {
+  font-size: 13px; font-weight: 500;
+  text-transform: none; letter-spacing: 0;
+  padding: 0 12px; height: 44px;
+}
+.tab.active { font-weight: 600; }
+.tab-sep {
+  width: 1px; height: 18px;
+  background: var(--border);
+  margin: 0 8px;
+  display: inline-block;
+}
+.tab-group {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  padding: 0 8px 0 4px;
+  opacity: .55;
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+}
+
+/* Headers de panel : plus sobre */
+.panel-header h2 {
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Labels formulaire : moins criards */
+label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Badges : moins agressifs */
+.badge {
+  text-transform: none;
+  letter-spacing: .3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+/* En-têtes de table : moins criards */
+th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* KPI label : moins criard */
+.kpi-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+/* OPS period dialog (input plein) */
+.simple-dialog input {
+  margin-bottom: 12px;
+}
+
+/* Pill phase de cinétique compacte */
+.phase-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.phase-pill .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+}
+.phase-pill.reflex .dot { background: var(--danger); }
+.phase-pill.concert .dot { background: var(--warn); }
+.phase-pill.post .dot { background: var(--ok); }
+
+.phase-popover {
+  position: absolute; z-index: 50;
+  margin-top: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 260px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.45);
+}
+.phase-popover button {
+  background: transparent; color: var(--text); border: 0;
+  text-align: left; padding: 8px 10px; border-radius: 4px;
+  cursor: pointer; font-size: 13px;
+}
+.phase-popover button:hover { background: rgba(255,255,255,.06); }
+.phase-popover button .desc {
+  display: block; color: var(--muted); font-size: 11px; margin-top: 2px;
+}
+
+/* Bandeau 3R discret */
+.banner-3r {
+  background: rgba(231,76,60,.10);
+  border: 1px solid rgba(231,76,60,.4);
+  color: #ffb3a8;
+  padding: 8px 12px; border-radius: 6px;
+  font-size: 12.5px;
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* Quickbar plus compacte */
+.quickbar { padding: 10px; gap: 6px; }
+.quickbar textarea { min-height: 32px; }
+
+/* Footer plus discret */
+.footer { padding: 6px 16px; font-size: 10.5px; opacity: .8; }
