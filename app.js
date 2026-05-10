@@ -278,9 +278,21 @@
   //   TOPBAR / SHELL
   // ============================================================
   function bindShell() {
-    document.querySelectorAll('.tab').forEach(t => {
+    document.querySelectorAll('.tab[data-tab]').forEach(t => {
       t.addEventListener('click', () => setTab(t.dataset.tab));
     });
+    // Onglet "Plus ▾" + son popover
+    const moreBtn = $('#tabMoreBtn');
+    const morePop = $('#tabMorePop');
+    if (moreBtn && morePop) {
+      moreBtn.addEventListener('click', (e) => { e.stopPropagation(); morePop.hidden = !morePop.hidden; });
+      morePop.querySelectorAll('.tab-pop').forEach(b => {
+        b.addEventListener('click', () => { setTab(b.dataset.tab); morePop.hidden = true; });
+      });
+      document.addEventListener('click', (e) => {
+        if (!morePop.hidden && !morePop.contains(e.target) && e.target !== moreBtn) morePop.hidden = true;
+      });
+    }
     const sel = $('#alertSelect');
     sel.value = state.alert;
     sel.addEventListener('change', () => {
@@ -573,11 +585,20 @@
   function setTab(tab) {
     if (!renderers[tab]) tab = 'cop';
     currentTab = tab;
-    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    // Active marker sur les onglets primaires + items du Plus
+    document.querySelectorAll('.tab[data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    document.querySelectorAll('.tab-pop').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    // Si l'onglet actif est dans le Plus, met en évidence le bouton Plus
+    const moreBtn = $('#tabMoreBtn');
+    if (moreBtn) {
+      const inMore = !!document.querySelector('.tab-pop[data-tab="' + tab + '"]');
+      moreBtn.classList.toggle('has-active', inMore);
+    }
     const main = $('#main');
     main.innerHTML = '';
     refreshDatalists();
     renderers[tab](main);
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
   // ============================================================
@@ -658,37 +679,17 @@
       el('div', { class: 'qb-hint' }, 'L : focus rapide · Ctrl+Entrée : envoyer')
     ));
 
-    root.appendChild(el('div', { class: 'grid-2' },
-      panel('Incidents actifs',
-        activeIncidents.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun incident actif.')
-          : tableEl(['Réf', 'Type', 'Navire', 'Sév.', 'Démarré'],
-            activeIncidents.slice(0, 8).map(i => [
-              el('span', { class: 'mono' }, i.ref || ''),
-              i.type || '', i.vessel || '',
-              badge((i.ines != null ? 'INES ' + i.ines : (i.severity || '?').toUpperCase()), severityColor(i.severity)),
-              fmtTime(i.startedAt)
-            ])),
-        el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'Gérer →')
-      ),
-      panel('Anticipation prochaine — H+24',
-        (() => {
-          const horiz = state.anticipation.filter(a => a.horizon === '24H').slice(0, 3);
-          return horiz.length === 0
-            ? el('div', { class: 'empty' }, 'Aucune anticipation à H+24.')
-            : el('div', { class: 'cards' },
-                ...horiz.map(a => el('div', { class: 'card' },
-                  el('div', { class: 'card-title' }, '⏱ ' + a.horizon + ' · ' + (a.title || '')),
-                  el('div', { class: 'card-body' },
-                    el('div', {}, el('strong', { style: 'color:var(--ok)' }, '✓ Best : '), a.best || '—'),
-                    el('div', {}, el('strong', { style: 'color:var(--warn)' }, '◯ Likely : '), a.likely || '—'),
-                    el('div', {}, el('strong', { style: 'color:var(--danger)' }, '✗ Worst : '), a.worst || '—')
-                  )
-                ))
-              );
-        })(),
-        el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('anticipation') }, 'Cellule anticipation →')
-      )
+    root.appendChild(panel('Incidents actifs',
+      activeIncidents.length === 0
+        ? el('div', { class: 'empty' }, 'Aucun incident actif.')
+        : tableEl(['Réf', 'Type', 'Navire', 'Sév.', 'Démarré'],
+          activeIncidents.slice(0, 8).map(i => [
+            el('span', { class: 'mono' }, i.ref || ''),
+            i.type || '', i.vessel || '',
+            badge((i.ines != null ? 'INES ' + i.ines : (i.severity || '?').toUpperCase()), severityColor(i.severity)),
+            fmtTime(i.startedAt)
+          ])),
+      el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'Gérer →')
     ));
 
     root.appendChild(panel('MEL — derniers événements',
@@ -788,14 +789,18 @@
       save(); closeModal(); setTab('incidents');
     };
 
+    const advOpen = !!(inc.roe || inc.intent || inc.endState);
     const form = el('div', {},
       twoCol('Référence', ref, 'Type', type),
       twoCol('Navire', vessel, 'Sévérité', severity),
-      twoCol('Niveau INES', ines, 'Niveau ROE', roe),
       twoCol('Statut', status, 'Date début', startedAt),
       field('Résumé (5W)', summary),
-      field('Intention de la Direction de crise', intent),
-      field('End-state (situation finale recherchée)', endState),
+      el('details', { class: 'adv', open: advOpen ? 'open' : false },
+        el('summary', {}, 'Détails avancés (INES · ROE · intention · end-state)'),
+        twoCol('Niveau INES', ines, 'Niveau ROE', roe),
+        field('Intention de la Direction de crise', intent),
+        field('End-state (situation finale recherchée)', endState)
+      ),
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Mettre à jour' : 'Créer'),
         el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
