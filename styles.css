@@ -925,3 +925,6 @@ details.adv[open] > summary { color: var(--text); }
 /* Onglets : un peu de gap pour aérer */
 .tabs { gap: 0; }
 .tab { padding: 0 14px; }
+
+/* Fix : l'attribut HTML `hidden` doit toujours masquer, peu importe display */
+[hidden] { display: none !important; }
