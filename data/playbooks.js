@@ -398,3 +398,138 @@ window.ROLES = [
   { code: 'QRT', name: 'Officier de quart',
     desc: 'Astreinte 24/7, journal MEL, passations, relais nuit/jour.' }
 ];
+
+// ============================================================
+//   VEILLE PERMANENTE — MOC (Maritime Operations Center)
+// ============================================================
+// 3 paliers d'engagement : T0 veille, T1 pré-alerte, T2 cellule activée.
+window.POSTURES = [
+  { code: 'T0', label: 'T0 — Veille',
+    desc: 'MOC seul (DPA-Watch + Watch Assistant 24/7). Aucune cellule mobilisée.',
+    expectedLevel: 'green' },
+  { code: 'T1', label: 'T1 — Pré-alerte',
+    desc: 'MOC + Direction + Opérations + Communication mobilisés. Conf-call < 15 min.',
+    expectedLevel: 'orange' },
+  { code: 'T2', label: 'T2 — Cellule activée',
+    desc: 'Toutes fonctions mobilisées (DIR/OPS/COM/ANT/SUP/QRT). Battle rhythm + SITREP cycle 6 h.',
+    expectedLevel: 'red' }
+];
+
+// Critères de déclenchement — chaque trigger applique automatiquement
+// une posture + un niveau d'alerte si déclaré par le MOC.
+window.TRIGGERS = [
+  // ---- Auto-T2 / ROUGE ----
+  { id: 'trg-ssas', cat: 'Sûreté', label: 'Alerte SSAS reçue',
+    desc: 'Ship Security Alert System déclenché — menace sûreté avérée.',
+    posture: 'T2', level: 'red', incidentType: 'Sûreté' },
+  { id: 'trg-mayday', cat: 'Sécurité', label: 'MAYDAY / détresse vérifiée',
+    desc: 'Vie humaine en danger imminent, navire/équipage en détresse.',
+    posture: 'T2', level: 'red', incidentType: 'Autre' },
+  { id: 'trg-fire-major', cat: 'Sécurité', label: 'Incendie majeur non maîtrisé',
+    desc: 'Incendie non éteint à T+30 min ou propagation hors compartiment.',
+    posture: 'T2', level: 'red', incidentType: 'Incendie' },
+  { id: 'trg-collision-cas', cat: 'Sécurité', label: 'Collision avec pertes humaines',
+    desc: 'Abordage avec décès ou disparus.',
+    posture: 'T2', level: 'red', incidentType: 'Collision' },
+  { id: 'trg-hostage', cat: 'Sûreté', label: 'Prise d\'otages confirmée',
+    desc: 'Équipage retenu, négociation requise.',
+    posture: 'T2', level: 'red', incidentType: 'Piraterie' },
+  { id: 'trg-ais-loss', cat: 'Sûreté', label: 'Perte AIS en zone HRA > 30 min',
+    desc: 'Disparition signal AIS d\'un navire en High Risk Area.',
+    posture: 'T2', level: 'red', incidentType: 'Sûreté' },
+  { id: 'trg-sinking', cat: 'Sécurité', label: 'Naufrage / abandon imminent',
+    desc: 'Mise à l\'eau des LSA, navire perdu.',
+    posture: 'T2', level: 'red', incidentType: 'Autre' },
+
+  // ---- Auto-T1 / ORANGE ----
+  { id: 'trg-medevac', cat: 'Médical', label: 'MEDEVAC requis',
+    desc: 'Évacuation médicale d\'un membre d\'équipage.',
+    posture: 'T1', level: 'orange', incidentType: 'Médical' },
+  { id: 'trg-death', cat: 'Médical', label: 'Décès à bord',
+    desc: 'Décès d\'un membre d\'équipage ou passager.',
+    posture: 'T1', level: 'orange', incidentType: 'Médical' },
+  { id: 'trg-grounding', cat: 'Sécurité', label: 'Échouement',
+    desc: 'Navire échoué, intégrité à évaluer.',
+    posture: 'T1', level: 'orange', incidentType: 'Échouement' },
+  { id: 'trg-collision', cat: 'Sécurité', label: 'Collision sans victime',
+    desc: 'Abordage sans pertes humaines, dommages à évaluer.',
+    posture: 'T1', level: 'orange', incidentType: 'Collision' },
+  { id: 'trg-pollution', cat: 'Environnement', label: 'Pollution / rejet > 1 m³',
+    desc: 'Rejet hydrocarbures ou produit chimique au-delà du seuil.',
+    posture: 'T1', level: 'orange', incidentType: 'Pollution' },
+  { id: 'trg-cyber-ot', cat: 'Cyber', label: 'Cyber-incident OT confirmé',
+    desc: 'Compromission ECDIS, GMDSS, machine ou équipement de navigation.',
+    posture: 'T1', level: 'orange', incidentType: 'Cyber' },
+  { id: 'trg-psc-detention', cat: 'Réglementaire', label: 'Détention PSC',
+    desc: 'Port State Control immobilise le navire.',
+    posture: 'T1', level: 'orange', incidentType: 'Sûreté' },
+  { id: 'trg-press', cat: 'Médiatique', label: 'Mention presse navire CMA',
+    desc: 'Apparition d\'un navire CMA dans la presse / réseaux sociaux sur incident.',
+    posture: 'T1', level: 'orange', incidentType: 'Autre' },
+  { id: 'trg-mob', cat: 'Sécurité', label: 'Homme à la mer (MOB)',
+    desc: 'MOB confirmé, manœuvre de récupération en cours.',
+    posture: 'T1', level: 'orange', incidentType: 'MOB' },
+
+  // ---- Vigilance JAUNE (le MOC suit, pas de mobilisation) ----
+  { id: 'trg-skiff', cat: 'Sûreté', label: 'Approche suspecte (skiff)',
+    desc: 'Embarcation non identifiée s\'approche, pas d\'agression confirmée.',
+    posture: 'T0', level: 'yellow', incidentType: 'Piraterie' },
+  { id: 'trg-weather', cat: 'Environnement', label: 'Météo extrême sur route',
+    desc: 'Cyclone tropical, glace, état de mer > 9 sur route prévue.',
+    posture: 'T0', level: 'yellow', incidentType: 'Autre' },
+  { id: 'trg-geopol', cat: 'Sûreté', label: 'Tension géopolitique sur transit',
+    desc: 'Bab-el-Mandeb, Hormuz, Taïwan, mer Noire — escalade en cours.',
+    posture: 'T0', level: 'yellow', incidentType: 'Sûreté' },
+  { id: 'trg-stowaway', cat: 'Sûreté', label: 'Clandestins à bord',
+    desc: 'Découverte de passagers clandestins.',
+    posture: 'T0', level: 'yellow', incidentType: 'Sûreté' },
+  { id: 'trg-psc-major', cat: 'Réglementaire', label: 'Déficience PSC majeure',
+    desc: 'Inspection PSC avec déficience non détaining mais sérieuse.',
+    posture: 'T0', level: 'yellow', incidentType: 'Sûreté' }
+];
+
+// Modèles de notification — single voice, à adapter avant envoi.
+// Variables disponibles : {VESSEL} {EVENT} {DTG} {AUTHOR} {LEVEL} {POSTURE}
+window.NOTIF_TEMPLATES = [
+  { id: 'notif-prealert',
+    label: 'Pré-alerte cellule (T1)',
+    channel: 'SMS / Telegram',
+    audience: 'Fonctions clés (DIR, OPS, COM)',
+    body: '[CMA-CRISIS] Pré-alerte cellule (T1). Navire {VESSEL}. Évt: {EVENT}. DTG {DTG}. Conf-call sous 15 min, ligne dédiée. — {AUTHOR}' },
+
+  { id: 'notif-activation',
+    label: 'Activation cellule de crise (T2)',
+    channel: 'SMS + appel + mail',
+    audience: 'Toutes fonctions cellule',
+    body: '[CMA-CRISIS] ACTIVATION cellule de crise (T2). Niveau {LEVEL}. Navire {VESSEL}. Évt: {EVENT}. DTG {DTG}. Salle de crise + remote. Confirmer présence. — {AUTHOR}' },
+
+  { id: 'notif-deescalation',
+    label: 'Désescalade vers T0',
+    channel: 'SMS / mail',
+    audience: 'Cellule + autorités',
+    body: '[CMA-CRISIS] Désescalade. Retour posture T0 / niveau VERT à {DTG}. Suivi confié au MOC. RETEX programmé. — {AUTHOR}' },
+
+  { id: 'notif-mayday-ack',
+    label: 'Ack interne MAYDAY reçu',
+    channel: 'Mail + Telegram',
+    audience: 'DPA-Watch → DIR / OPS',
+    body: '[CMA-MOC] MAYDAY reçu de {VESSEL} à {DTG}. Position transmise MRCC. Cellule en cours d\'activation. Maintien comm avec le bord. — {AUTHOR}' },
+
+  { id: 'notif-press-hold',
+    label: 'Holding statement presse',
+    channel: 'Mail',
+    audience: 'COM → presse',
+    body: 'CMA Ships confirme avoir connaissance d\'un événement impliquant le navire {VESSEL} survenu à {DTG}. Toutes les ressources sont mobilisées. La sécurité de l\'équipage est notre priorité absolue. Une cellule de crise est activée et coopère pleinement avec les autorités compétentes. Une mise à jour sera communiquée dès que des éléments fiables et vérifiés seront disponibles.' },
+
+  { id: 'notif-flag-state',
+    label: 'Notification État du pavillon',
+    channel: 'Mail formel',
+    audience: 'État du pavillon',
+    body: 'Subject: Casualty notification — {VESSEL} — {DTG}\n\nDear Sir/Madam,\n\nIn accordance with our reporting obligations under the ISM Code and applicable conventions, we hereby notify you of the following event:\n\nVessel: {VESSEL}\nDate/Time: {DTG}\nEvent: {EVENT}\n\nA crisis cell has been activated. Further reports will follow according to standard SITREP cycle (every 6 hours).\n\nRegards,\n{AUTHOR}\nCMA Ships — Crisis Cell' },
+
+  { id: 'notif-families',
+    label: 'Cellule familles — premier contact',
+    channel: 'Téléphone',
+    audience: 'HR / SUP',
+    body: 'Bonjour, je suis {AUTHOR} de la cellule familles de CMA Ships. Je vous appelle car votre proche {…} fait partie de l\'équipage du {VESSEL}. Un événement est survenu à {DTG}, votre proche est [en sécurité / pris en charge / …]. Une ligne dédiée vous est ouverte 24/7 : {…}. Nous reviendrons vers vous dans les prochaines heures avec des informations vérifiées.' }
+];

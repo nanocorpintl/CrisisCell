@@ -101,7 +101,10 @@
       playbookState: {},
       ccir: window.CCIR_TEMPLATE.map(c => ({ ...c, id: id(), items: [] })),
       retex: [],
-      exercises: []
+      exercises: [],
+      posture: 'T0',
+      watch: { officer: '', assistant: '', startedAt: '' },
+      triggerEvents: []
     };
   }
 
@@ -496,7 +499,8 @@
         a: 'actions', d: 'decisions', n: 'anticipation', k: 'comms',
         h: 'stakeholders', u: 'resources', r: 'risk', b: 'rhythm',
         p: 'passation', s: 'sitrep', o: 'opord', l: 'playbooks',
-        e: 'ccir', x: 'retex', z: 'exercises'
+        e: 'ccir', x: 'retex', z: 'exercises',
+        w: 'veille', q: 'triggers', f: 'notif'
       };
       const target = map[e.key.toLowerCase()];
       if (target) { setTab(target); e.preventDefault(); }
@@ -2010,6 +2014,283 @@
       el('thead', {}, el('tr', {}, ...headers.map(h => el('th', {}, h)))),
       el('tbody', {}, ...rows.map(cells => el('tr', {}, ...cells.map(c =>
         el('td', {}, c == null ? '' : (typeof c === 'string' || typeof c === 'number' ? String(c) : c)))))));
+  }
+
+  // ============================================================
+  //   VEILLE — MOC (Maritime Operations Center)
+  // ============================================================
+  renderers.veille = (root) => {
+    const posture = (window.POSTURES.find(p => p.code === state.posture) || window.POSTURES[0]);
+    const recentTriggers = (state.triggerEvents || []).slice(0, 5);
+
+    // En-tête : posture + niveau d'alerte côte à côte
+    root.appendChild(panel('Posture courante',
+      el('div', {},
+        el('div', { class: 'flex', style: 'gap:12px;align-items:center;flex-wrap:wrap' },
+          el('div', {},
+            el('div', { class: 'kpi-label' }, 'Posture'),
+            el('div', { style: 'font-size:22px;font-weight:700;color:var(--accent-2)' }, posture.label)),
+          el('div', {},
+            el('div', { class: 'kpi-label' }, 'Niveau d\'alerte'),
+            el('div', { style: 'font-size:22px;font-weight:700' }, state.alert.toUpperCase())),
+          el('div', { style: 'flex:1' }),
+          el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('triggers') }, '→ Critères'),
+          el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('notif') }, '→ Modèles d\'alerte')
+        ),
+        el('div', { class: 'muted', style: 'margin-top:8px' }, posture.desc)
+      )
+    ));
+
+    // Boutons d'escalade / désescalade
+    const escBox = el('div', { class: 'flex', style: 'gap:8px;flex-wrap:wrap' });
+    if (state.posture !== 'T0') escBox.appendChild(
+      el('button', { class: 'btn-success', onclick: () => escalateTo('T0') }, '↓ Désescalade vers T0'));
+    if (state.posture !== 'T1') escBox.appendChild(
+      el('button', { class: 'btn-warn', onclick: () => escalateTo('T1') }, '↑ Pré-alerte (T1)'));
+    if (state.posture !== 'T2') escBox.appendChild(
+      el('button', { class: 'btn-danger', onclick: () => escalateTo('T2') }, '⚡ Activer cellule (T2)'));
+    root.appendChild(panel('Escalade / désescalade', escBox));
+
+    // Quart en cours
+    const w = state.watch || {};
+    const officer = el('input', { value: w.officer || '', placeholder: 'DPA-Watch (officier de quart)', list: 'dl-authors' });
+    const assistant = el('input', { value: w.assistant || '', placeholder: 'Watch Assistant', list: 'dl-authors' });
+    const startBtn = el('button', { class: 'btn-primary', onclick: () => {
+      state.watch = { officer: officer.value, assistant: assistant.value, startedAt: nowISO() };
+      logMEL('INFO', `Prise de quart : ${officer.value} (assistant ${assistant.value || '-'})`);
+      save(); setTab('veille');
+    } }, '⏱ Prendre le quart');
+    const handoverBtn = el('button', { class: 'btn-ghost', onclick: () => setTab('passation') }, '→ Passation formelle');
+    root.appendChild(panel('Quart en cours',
+      el('div', {},
+        twoCol('Officier de quart', officer, 'Assistant', assistant),
+        el('div', { class: 'muted', style: 'font-size:12px' },
+          w.startedAt ? `En quart depuis ${fmtDTG(w.startedAt)}` : 'Aucun quart actif.'),
+        el('div', { class: 'flex', style: 'margin-top:10px' }, startBtn, handoverBtn)
+      )
+    ));
+
+    // Saisie ultra-rapide MEL (le seul outil que le MOC utilise tout le temps)
+    const qbCat = el('select', {}, ...['INFO','INC','SECURITY','SAFETY','VESSEL','COMMS','MEDIA','OTHER']
+      .map(c => el('option', { value: c }, c)));
+    const qbAuthor = el('input', { value: w.officer || currentUserName(), list: 'dl-authors' });
+    const qbText = el('textarea', { placeholder: 'Saisie rapide d\'événement (Ctrl+Entrée)…' });
+    const qbBtn = el('button', { class: 'btn-primary', onclick: () => {
+      if (!qbText.value.trim()) return;
+      logMEL(qbCat.value, qbText.value.trim(), qbAuthor.value || 'MOC');
+      qbText.value = '';
+      toast('Événement consigné', 'ok');
+      setTab('veille');
+    } }, '⏎ Log');
+    qbText.addEventListener('keydown', e => {
+      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); qbBtn.click(); }
+    });
+    root.appendChild(panel('Saisie rapide — Journal',
+      el('div', { class: 'quickbar' },
+        qbCat, qbAuthor, qbText, qbBtn,
+        el('div', { class: 'qb-hint' }, 'L : focus rapide · Ctrl+Entrée : envoyer'))
+    ));
+
+    // Triggers récents + accès rapide
+    root.appendChild(panel('Déclenchements récents',
+      recentTriggers.length === 0
+        ? el('div', { class: 'empty' }, 'Aucun trigger déclaré sur les dernières 24 h. Tout est calme.')
+        : tableEl(['DTG', 'Catégorie', 'Trigger', 'Posture →', 'Par'],
+            recentTriggers.map(t => [
+              el('span', { class: 'mono' }, fmtDTG(t.ts)),
+              badge(t.cat, 'blue'),
+              t.label,
+              badge(t.posture, t.posture === 'T2' ? 'red' : t.posture === 'T1' ? 'orange' : 'yellow'),
+              t.author || '—'
+            ]))
+    ));
+
+    // MEL des dernières heures
+    root.appendChild(panel('Journal récent',
+      state.mel.length === 0
+        ? el('div', { class: 'empty' }, 'Vide.')
+        : el('div', {}, ...state.mel.slice(0, 8).map(meEntry))
+    ));
+  };
+
+  function escalateTo(targetPosture) {
+    const target = window.POSTURES.find(p => p.code === targetPosture);
+    if (!target) return;
+    if (state.posture === targetPosture) return;
+    if (!confirm(`Passer en posture ${target.label} ?\n${target.desc}`)) return;
+    state.posture = targetPosture;
+    state.alert = target.expectedLevel;
+    applyAlertClass();
+    $('#alertSelect').value = state.alert;
+    logMEL('SECURITY', `Escalade → ${target.label} · niveau ${state.alert.toUpperCase()}`);
+    save();
+    if (targetPosture !== 'T0') {
+      // Proposer d'ouvrir le modèle de notification correspondant
+      if (confirm('Ouvrir le modèle de notification correspondant ?')) {
+        setTab('notif');
+        return;
+      }
+    }
+    setTab('veille');
+  }
+
+  // ============================================================
+  //   TRIGGERS — critères de déclenchement
+  // ============================================================
+  renderers.triggers = (root) => {
+    const cats = [...new Set(window.TRIGGERS.map(t => t.cat))];
+    root.appendChild(panel('Critères de déclenchement',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Liste pré-définie des critères qui font basculer la posture (T0/T1/T2) et le niveau d\'alerte. Cliquer "Déclarer" applique automatiquement la posture cible et crée un incident pré-rempli.'),
+        ...cats.map(c => el('div', { style: 'margin-bottom:14px' },
+          el('h4', { style: 'margin:8px 0;color:var(--accent-2)' }, c),
+          tableEl(['Critère', 'Description', 'Posture →', 'Niveau →', ''],
+            window.TRIGGERS.filter(t => t.cat === c).map(t => [
+              el('strong', {}, t.label),
+              el('span', { class: 'muted' }, t.desc),
+              badge(t.posture, t.posture === 'T2' ? 'red' : t.posture === 'T1' ? 'orange' : 'yellow'),
+              badge(t.level.toUpperCase(),
+                t.level === 'red' ? 'red' : t.level === 'orange' ? 'orange' : t.level === 'yellow' ? 'yellow' : 'green'),
+              el('button', { class: 'btn-primary btn-sm', onclick: () => declareTrigger(t) }, 'Déclarer')
+            ]))))
+      )
+    ));
+
+    if (state.triggerEvents && state.triggerEvents.length) {
+      root.appendChild(panel('Historique',
+        tableEl(['DTG', 'Catégorie', 'Trigger', 'Posture', 'Niveau', 'Navire', 'Par'],
+          state.triggerEvents.map(t => [
+            el('span', { class: 'mono' }, fmtDTG(t.ts)),
+            badge(t.cat, 'blue'), t.label,
+            badge(t.posture, t.posture === 'T2' ? 'red' : t.posture === 'T1' ? 'orange' : 'yellow'),
+            badge((t.level || '').toUpperCase(), t.level === 'red' ? 'red' : t.level === 'orange' ? 'orange' : 'yellow'),
+            t.vessel || '—', t.author || '—'
+          ]))));
+    }
+  };
+
+  function declareTrigger(trg) {
+    const vesselSel = el('input', { list: 'dl-vessels', placeholder: 'Navire concerné (optionnel)' });
+    const note = el('textarea', { placeholder: 'Précisions / contexte (optionnel)' });
+    const submit = () => {
+      const ev = {
+        id: id(), ts: nowISO(),
+        triggerId: trg.id, label: trg.label, cat: trg.cat,
+        posture: trg.posture, level: trg.level,
+        vessel: vesselSel.value, note: note.value,
+        author: currentUserName() || 'MOC'
+      };
+      state.triggerEvents = state.triggerEvents || [];
+      state.triggerEvents.unshift(ev);
+      // Application automatique
+      const prevPosture = state.posture;
+      // On n'écrase que vers une posture plus élevée (ne jamais désescalader via trigger)
+      const order = { T0: 0, T1: 1, T2: 2 };
+      if (order[trg.posture] > order[prevPosture || 'T0']) state.posture = trg.posture;
+      // Niveau d'alerte : aussi vers le haut
+      const lvlOrder = { green: 0, yellow: 1, orange: 2, red: 3, black: 4 };
+      if (lvlOrder[trg.level] > lvlOrder[state.alert]) {
+        state.alert = trg.level;
+        applyAlertClass();
+        $('#alertSelect').value = state.alert;
+      }
+      // Création d'un incident pré-rempli
+      const incRef = 'INC-' + Date.now().toString(36).toUpperCase();
+      state.incidents.push({
+        id: id(), ref: incRef,
+        type: trg.incidentType || 'Autre',
+        vessel: vesselSel.value || '',
+        severity: trg.level === 'red' ? 'crit' : trg.level === 'orange' ? 'high' : 'med',
+        ines: trg.level === 'red' ? 5 : trg.level === 'orange' ? 4 : 2,
+        roe: null,
+        status: 'open', startedAt: ev.ts,
+        summary: `[Trigger ${trg.label}] ${note.value || ''}`.trim()
+      });
+      if (vesselSel.value) {
+        const v = state.vessels.find(x => x.name === vesselSel.value);
+        if (v) v.status = 'incident';
+      }
+      logMEL('SECURITY', `Trigger déclaré : ${trg.label} → posture ${state.posture}, niveau ${state.alert.toUpperCase()}, incident ${incRef}`);
+      save(); closeModal();
+      if (confirm(`Trigger déclaré.\nPosture : ${state.posture} · Niveau : ${state.alert.toUpperCase()}\nIncident ${incRef} créé.\n\nOuvrir un modèle de notification maintenant ?`)) {
+        setTab('notif');
+      } else {
+        setTab('veille');
+      }
+    };
+    openModal('Déclarer un trigger : ' + trg.label,
+      el('div', {},
+        el('div', { class: 'auth-warn' },
+          'Cette action va passer la posture en ', el('strong', {}, trg.posture),
+          ' et le niveau d\'alerte en ', el('strong', {}, trg.level.toUpperCase()),
+          ', créer un incident et tracer l\'événement dans le journal.'),
+        field('Navire concerné', vesselSel),
+        field('Note', note),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-danger', onclick: submit }, '⚡ Confirmer le déclenchement'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
+  }
+
+  // ============================================================
+  //   NOTIF — modèles d'alerte
+  // ============================================================
+  renderers.notif = (root) => {
+    root.appendChild(panel('Modèles d\'alerte (single voice)',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Messages pré-formatés à diffuser selon le palier déclenché. Variables auto-substituées : {VESSEL} {EVENT} {DTG} {AUTHOR} {LEVEL} {POSTURE}. Toujours faire valider par DIR avant diffusion externe.'),
+        el('div', { class: 'cards' },
+          ...window.NOTIF_TEMPLATES.map(tpl => el('div', { class: 'card' },
+            el('div', { class: 'flex-between' },
+              el('div', { class: 'card-title' }, tpl.label),
+              el('div', {}, badge(tpl.channel, 'blue'))),
+            el('div', { class: 'card-meta' }, 'Pour : ' + tpl.audience),
+            el('div', { class: 'card-actions' },
+              el('button', { class: 'btn-primary btn-sm', onclick: () => fillNotif(tpl) }, 'Renseigner & copier')))))
+      )
+    ));
+  };
+
+  function fillNotif(tpl) {
+    const lastInc = (state.incidents.find(i => i.status !== 'closed')) || {};
+    const vessel = el('input', { list: 'dl-vessels', value: lastInc.vessel || '', placeholder: '{VESSEL}' });
+    const event = el('input', { value: lastInc.summary ? lastInc.summary.split('\n')[0] : (lastInc.type || ''), placeholder: '{EVENT}' });
+    const out = el('textarea', { style: 'min-height:160px' });
+
+    const refresh = () => {
+      out.value = tpl.body
+        .replace(/\{VESSEL\}/g, vessel.value || '—')
+        .replace(/\{EVENT\}/g, event.value || '—')
+        .replace(/\{DTG\}/g, fmtDTG(nowISO()))
+        .replace(/\{AUTHOR\}/g, currentUserName() || 'MOC')
+        .replace(/\{LEVEL\}/g, state.alert.toUpperCase())
+        .replace(/\{POSTURE\}/g, state.posture);
+    };
+    vessel.addEventListener('input', refresh);
+    event.addEventListener('input', refresh);
+    refresh();
+
+    const copyBtn = el('button', { class: 'btn-primary', onclick: async () => {
+      try {
+        await navigator.clipboard.writeText(out.value);
+        toast('Copié dans le presse-papier', 'ok');
+        logMEL('COMMS', `Modèle "${tpl.label}" copié pour diffusion (${tpl.channel}, ${tpl.audience})`);
+        save();
+      } catch (e) {
+        out.select();
+        toast('Sélectionné — Ctrl+C pour copier', 'warn');
+      }
+    } }, '📋 Copier');
+
+    openModal(tpl.label,
+      el('div', {},
+        el('div', { class: 'card-meta', style: 'margin-bottom:8px' }, 'Canal : ' + tpl.channel + ' · Audience : ' + tpl.audience),
+        twoCol('Navire', vessel, 'Événement', event),
+        field('Message', out),
+        el('div', { class: 'flex', style: 'margin-top:12px' },
+          copyBtn,
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Fermer'))
+      ));
   }
 
   // ============================================================
