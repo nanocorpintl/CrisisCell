@@ -75,42 +75,34 @@
 </header>
 
 <nav class="tabs" role="tablist">
-  <span class="tab-group">Suivi</span>
   <button class="tab active" data-tab="cop">COP</button>
   <button class="tab" data-tab="incidents">Incidents</button>
   <button class="tab" data-tab="vessels">Navires</button>
   <button class="tab" data-tab="mel">MEL</button>
-
-  <span class="tab-sep"></span>
-  <span class="tab-group">Action</span>
   <button class="tab" data-tab="actions">Actions</button>
   <button class="tab" data-tab="decisions">Décisions</button>
-  <button class="tab" data-tab="anticipation">Anticipation</button>
-
-  <span class="tab-sep"></span>
-  <span class="tab-group">Cellule</span>
-  <button class="tab" data-tab="team">Cellule</button>
   <button class="tab" data-tab="comms">Comms</button>
-  <button class="tab" data-tab="stakeholders">Contacts</button>
-  <button class="tab" data-tab="resources">Ressources</button>
-  <button class="tab" data-tab="rhythm">Rythme</button>
-  <button class="tab" data-tab="passation">Passation</button>
-
-  <span class="tab-sep"></span>
-  <span class="tab-group">Reporting</span>
+  <button class="tab" data-tab="team">Cellule</button>
   <button class="tab" data-tab="sitrep">SITREP</button>
-  <button class="tab" data-tab="opord">OPORD</button>
-
-  <span class="tab-sep"></span>
-  <span class="tab-group">Plans</span>
-  <button class="tab" data-tab="playbooks">Playbooks</button>
-  <button class="tab" data-tab="risk">Risques</button>
-  <button class="tab" data-tab="ccir">CCIR</button>
-
-  <span class="tab-sep"></span>
-  <span class="tab-group">Capitalisation</span>
-  <button class="tab" data-tab="retex">RETEX</button>
-  <button class="tab" data-tab="exercises">Exercices</button>
+  <div class="tab-more-wrap">
+    <button class="tab tab-more" id="tabMoreBtn" aria-haspopup="true">Plus <span class="caret">▾</span></button>
+    <div class="tab-more-pop" id="tabMorePop" hidden>
+      <button class="tab-pop" data-tab="anticipation">Anticipation</button>
+      <button class="tab-pop" data-tab="passation">Passation de quart</button>
+      <button class="tab-pop" data-tab="rhythm">Rythme</button>
+      <button class="tab-pop" data-tab="opord">OPORD</button>
+      <div class="menu-sep"></div>
+      <button class="tab-pop" data-tab="stakeholders">Contacts</button>
+      <button class="tab-pop" data-tab="resources">Ressources</button>
+      <button class="tab-pop" data-tab="risk">Risques</button>
+      <div class="menu-sep"></div>
+      <button class="tab-pop" data-tab="playbooks">Playbooks</button>
+      <button class="tab-pop" data-tab="ccir">CCIR</button>
+      <div class="menu-sep"></div>
+      <button class="tab-pop" data-tab="retex">RETEX</button>
+      <button class="tab-pop" data-tab="exercises">Exercices</button>
+    </div>
+  </div>
 </nav>
 
 <main id="main"></main>
@@ -146,9 +138,6 @@
       <button class="btn-ghost" id="modalClose" aria-label="Fermer">✕</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
-    <div class="modal-foot muted">
-      Astuce : <span class="kbd">Ctrl</span>+<span class="kbd">Entrée</span> pour valider, <span class="kbd">Esc</span> pour fermer.
-    </div>
   </div>
 </div>
 
@@ -206,8 +195,8 @@
 </div>
 
 <footer class="footer">
-  <span>CrisisCell · Inspiré ICS · NATO SITREP · IMO A.1072(28) · BMP5 · ISM Code · REX EDF/ASN</span>
-  <span id="storageStatus">🔐 Données chiffrées localement (AES-GCM 256).</span>
+  <span>CrisisCell · CMA Ships</span>
+  <span id="storageStatus">🔐 Données chiffrées localement</span>
 </footer>
 
 </div><!-- /#appShell -->
