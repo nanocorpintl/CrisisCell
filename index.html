@@ -46,12 +46,10 @@
   <div class="status-strip">
     <div class="alert-level" id="alertLevel">
       <span class="alert-dot"></span>
-      <select id="alertSelect" aria-label="Niveau d'alerte">
-        <option value="green">Vert — Veille</option>
-        <option value="yellow">Jaune — Vigilance</option>
-        <option value="orange">Orange — Pré-alerte</option>
-        <option value="red">Rouge — Cellule activée</option>
-        <option value="black">Noir — Crise majeure</option>
+      <select id="alertSelect" aria-label="Mode opérationnel">
+        <option value="nominal">VERT — Nominal</option>
+        <option value="vigilance">AMBRE — Vigilance</option>
+        <option value="crise">ROUGE — Crise</option>
       </select>
     </div>
     <div class="utc-clock"><span class="lbl">UTC</span><span id="utcClock">--:--:--</span></div>
@@ -81,6 +79,7 @@
   <button class="tab" data-tab="vessels">Navires</button>
   <button class="tab" data-tab="mel">MEL</button>
   <button class="tab" data-tab="actions">Actions</button>
+  <button class="tab" data-tab="frictions">Frictions</button>
   <button class="tab" data-tab="decisions">Décisions</button>
   <button class="tab" data-tab="comms">Comms</button>
   <button class="tab" data-tab="sitrep">SITREP</button>
@@ -171,6 +170,10 @@
             <tr><td><span class="kbd">G</span> <span class="kbd">P</span></td><td>Playbooks</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">E</span></td><td>CCIR</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">T</span></td><td>Cellule</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">W</span></td><td>Veille (MOC)</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">Y</span></td><td>Frictions</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">Q</span></td><td>Critères de déclenchement</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">F</span></td><td>Modèles d'alerte</td></tr>
           </table>
         </div>
         <div>

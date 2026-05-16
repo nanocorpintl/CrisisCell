@@ -63,11 +63,24 @@
   // ============================================================
   function defaultState() {
     return {
-      alert: 'green',
+      // Mode CMA Ships : nominal | vigilance | crise (statut VERT/AMBRE/ROUGE)
+      // `alert` est conservé comme nom de champ pour rétro-compatibilité.
+      alert: 'nominal',
       phase: 'reflex',
       opsPeriod: '',
       sitrepCounter: 0,
       opordCounter: 0,
+      weekNumber: '',
+      sitrepContext: '',
+      // Pilotage CMA Ships
+      dutyManager: '',
+      dutyOfficers: { FM: '', CR: '', FU: '' },
+      deptStatus:   { FM: 'green', CR: 'green', FU: 'green' },
+      doLead: 'FM',
+      // KPI manuels SITREP
+      vesselsPort: 0,
+      vesselsTransit: 0,
+      // Données métier
       incidents: [],
       vessels: [
         { id: id(), name: 'CMA CGM JACQUES SAADE', imo: '9839179', type: 'ULCV', status: 'normal', position: '', notes: '' },
@@ -89,11 +102,24 @@
       ],
       resources: [],
       risks: [],
+      // Battle rhythm = rituels CMA Ships
       rhythm: [
-        { id: id(), time: '08:00', title: 'Stand-up cellule', cadence: 'Quotidien', desc: 'COP, intentions, décisions du jour' },
-        { id: id(), time: '12:00', title: 'SITREP N°x',       cadence: '6H',        desc: 'Diffusion HQ + autorités' },
-        { id: id(), time: '14:00', title: 'Briefing Anticipation', cadence: 'Quotidien', desc: 'Cellule prospective H+24/72' },
-        { id: id(), time: '18:00', title: 'Battle update + Passation', cadence: 'Quotidien', desc: 'Bascule équipe nuit, hand-over formel' }
+        { id: id(), time: '08:00', title: 'SITREPs départementaux finalisés', cadence: 'Quotidien',
+          desc: 'DO FM/CR/FU finalisent leur SITREP départemental sur la trame standard.' },
+        { id: id(), time: '08:30', title: 'SITREP CMA Ships consolidé', cadence: 'Quotidien',
+          desc: 'DO lead consolide et diffuse à VP, Heads, DM Marseille. Avant 08h30.' },
+        { id: id(), time: '09:00', title: 'Daily Stand-up', cadence: 'Quotidien',
+          desc: '15 min strict. Animé par DM Marseille, 3 DO Asie en visio + Heads (ou deputies).' },
+        { id: id(), time: '11:00', title: 'Passation Duty Manager', cadence: 'Mardi matin',
+          desc: '45 min — handover formel DM sortant → DM entrant. Rotation hebdo.' },
+        { id: id(), time: '14:00', title: 'Weekly Operations Review', cadence: 'Jeudi',
+          desc: '60 min. VP + Heads + DM. Consolidation Weekly Pack pour Group MM vendredi.' },
+        { id: id(), time: '18:00', title: 'Weekly Pack consolidé → bureau VP', cadence: 'Jeudi',
+          desc: '1 page par département + 1 consolidé. Remis au plus tard 18h00 Marseille.' },
+        { id: id(), time: '08:00', title: 'Group Management Meeting (CMA CGM)', cadence: 'Vendredi',
+          desc: 'VP CMA Ships y participe avec Weekly Pack + SITREP du jour en main.' },
+        { id: id(), time: '09:00', title: 'Monthly Business Review', cadence: '1er mardi du mois',
+          desc: '90 min. Animé par les HoD, VP présent. VP Brief diffusé 48h avant.' }
       ],
       passations: [],
       sitreps: [],
@@ -102,10 +128,37 @@
       ccir: window.CCIR_TEMPLATE.map(c => ({ ...c, id: id(), items: [] })),
       retex: [],
       exercises: [],
-      posture: 'T0',
       watch: { officer: '', assistant: '', startedAt: '' },
-      triggerEvents: []
+      triggerEvents: [],
+      // Nouveaux modules CMA Ships
+      frictions: [],
+      weakSignals: [],
+      topMgmtPoints: []
     };
+  }
+
+  // Migration automatique des données antérieures vers le schéma CMA Ships.
+  function migrateState() {
+    if (!state) return;
+    // Statut/alerte : ancien 5 niveaux → mode nominal/vigilance/crise
+    const map = { green: 'nominal', yellow: 'vigilance', orange: 'vigilance',
+                  red: 'crise', black: 'crise',
+                  nominal: 'nominal', vigilance: 'vigilance', crise: 'crise' };
+    state.alert = map[state.alert] || 'nominal';
+    // Champs ajoutés à la volée
+    if (!state.dutyOfficers) state.dutyOfficers = { FM: '', CR: '', FU: '' };
+    if (!state.deptStatus) state.deptStatus = { FM: 'green', CR: 'green', FU: 'green' };
+    if (!state.doLead) state.doLead = 'FM';
+    if (state.vesselsPort == null) state.vesselsPort = 0;
+    if (state.vesselsTransit == null) state.vesselsTransit = 0;
+    if (!state.frictions) state.frictions = [];
+    if (!state.weakSignals) state.weakSignals = [];
+    if (!state.topMgmtPoints) state.topMgmtPoints = [];
+    if (!state.dutyManager) state.dutyManager = '';
+    if (!state.weekNumber) state.weekNumber = '';
+    if (!state.sitrepContext) state.sitrepContext = '';
+    // Drop ancien `posture` (T0/T1/T2) — remplacé par `alert` mode-based
+    if (state.posture) delete state.posture;
   }
 
   // ============================================================
@@ -243,6 +296,7 @@
         await CrisisAuth.unlock(pwd.value);
         CrisisAuth.setUser(userInput.value.trim() || 'Anonyme');
         state = await CrisisAuth.loadState() || defaultState();
+        migrateState();
         boot();
       } catch (e) {
         errBox.appendChild(el('div', { class: 'auth-error' }, e.message));
@@ -362,7 +416,9 @@
     return (CrisisAuth.getUser() || {}).name || '';
   }
   function applyAlertClass() {
-    document.body.classList.remove('alert-green','alert-yellow','alert-orange','alert-red','alert-black');
+    document.body.classList.remove(
+      'alert-green','alert-yellow','alert-orange','alert-red','alert-black',
+      'alert-nominal','alert-vigilance','alert-crise');
     document.body.classList.add('alert-' + state.alert);
   }
   function tickClocks() {
@@ -500,7 +556,8 @@
         h: 'stakeholders', u: 'resources', r: 'risk', b: 'rhythm',
         p: 'passation', s: 'sitrep', o: 'opord', l: 'playbooks',
         e: 'ccir', x: 'retex', z: 'exercises',
-        w: 'veille', q: 'triggers', f: 'notif'
+        w: 'veille', q: 'triggers', f: 'notif',
+        y: 'frictions'
       };
       const target = map[e.key.toLowerCase()];
       if (target) { setTab(target); e.preventDefault(); }
@@ -531,7 +588,8 @@
       decisions: 'decision', comms: 'comm', stakeholders: 'stakeholder',
       resources: 'resource', risk: 'risk', rhythm: 'rhythm',
       team: 'team', passation: 'passation', anticipation: 'anticipation',
-      retex: 'retex', exercises: 'exercise', mel: 'mel'
+      retex: 'retex', exercises: 'exercise', mel: 'mel',
+      frictions: 'friction'
     };
     const action = map[currentTab];
     if (action) quickAction(action);
@@ -553,6 +611,7 @@
     if (kind === 'anticipation') return anticipationForm();
     if (kind === 'retex') return retexForm();
     if (kind === 'exercise') return exerciseForm();
+    if (kind === 'friction') return frictionForm();
   }
 
   // ============================================================
@@ -752,10 +811,11 @@
     ));
   };
   function incidentForm(idEdit) {
-    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', ines: 2 };
+    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', ines: 2, department: 'FM' };
     const ref = el('input', { value: inc.ref || ('INC-' + Date.now().toString(36).toUpperCase()) });
     const type = el('select', {}, ...['Piraterie','Incendie','Collision','Échouement','MOB','Médical','Cyber','Pollution','Sûreté','Cargaison','Mécanique','Autre']
       .map(t => el('option', { value: t, selected: inc.type === t }, t)));
+    const department = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code, selected: (inc.department || 'FM') === d.code }, d.code + ' — ' + d.label)));
     const vessel = el('input', { list: 'dl-vessels', value: inc.vessel || '' });
     const severity = el('select', {}, ...['low','med','high','crit'].map(s => el('option', { value: s, selected: inc.severity === s }, s.toUpperCase())));
     const ines = el('select', {}, ...window.SEVERITY_SCALE.map(s => el('option', { value: s.level, selected: (inc.ines ?? 2) == s.level }, `${s.level} — ${s.label}`)));
@@ -771,6 +831,7 @@
       const data = {
         id: inc.id || id(),
         ref: ref.value, type: type.value, vessel: vessel.value,
+        department: department.value,
         severity: severity.value, ines: parseInt(ines.value, 10), roe: roe.value ? parseInt(roe.value, 10) : null,
         status: status.value,
         startedAt: new Date(startedAt.value).toISOString(),
@@ -781,23 +842,25 @@
         logMEL('INC', `Incident ${data.ref} mis à jour (${data.status})`);
       } else {
         state.incidents.push(data);
-        logMEL('INC', `Nouvel incident ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity}, INES ${data.ines})`);
-        if (data.severity === 'crit' || data.ines >= 5) state.alert = 'red';
-        else if (data.severity === 'high' && state.alert === 'green') state.alert = 'orange';
+        logMEL('INC', `Nouvel incident [${data.department}] ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity}, INES ${data.ines})`);
+        if (data.severity === 'crit' || data.ines >= 5) state.alert = 'crise';
+        else if (data.severity === 'high' && state.alert === 'nominal') state.alert = 'vigilance';
         if (data.vessel) {
           const v = state.vessels.find(x => x.name === data.vessel);
           if (v) v.status = 'incident';
         }
         applyAlertClass();
+        $('#alertSelect').value = state.alert;
       }
       save(); closeModal(); setTab('incidents');
     };
 
     const advOpen = !!(inc.roe || inc.intent || inc.endState);
     const form = el('div', {},
-      twoCol('Référence', ref, 'Type', type),
-      twoCol('Navire', vessel, 'Sévérité', severity),
-      twoCol('Statut', status, 'Date début', startedAt),
+      twoCol('Référence', ref, 'Département', department),
+      twoCol('Type', type, 'Navire', vessel),
+      twoCol('Sévérité', severity, 'Statut', status),
+      field('Date début', startedAt),
       field('Résumé (5W)', summary),
       el('details', { class: 'adv', open: advOpen ? 'open' : false },
         el('summary', {}, 'Détails avancés (INES · ROE · intention · end-state)'),
@@ -1017,19 +1080,22 @@
     save(); setTab('actions');
   }
   function actionForm(idEdit) {
-    const a = idEdit ? state.actions.find(x => x.id === idEdit) : { priority: 'P2', status: 'todo' };
+    const a = idEdit ? state.actions.find(x => x.id === idEdit) : { priority: 'P2', status: 'todo', department: 'FM' };
     const priority = el('select', {}, ...['P1','P2','P3'].map(p => el('option', { value: p, selected: a.priority === p }, p)));
     const status = el('select', {}, ...[['todo','À faire'],['in-progress','En cours'],['blocked','Bloquée'],['done','Faite']]
       .map(([k, l]) => el('option', { value: k, selected: a.status === k }, l)));
+    const department = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code, selected: (a.department || 'FM') === d.code }, d.code + ' — ' + d.label)));
     const text = el('textarea', { placeholder: 'Action concrète, mesurable, attribuable' }, a.text || '');
     const owner = el('input', { value: a.owner || currentUserName(), list: 'dl-owners' });
     const due = el('input', { type: 'datetime-local', value: a.due ? new Date(a.due).toISOString().slice(0, 16) : '' });
     const submit = () => {
       const data = { id: a.id || id(), text: text.value, owner: owner.value,
         due: due.value ? new Date(due.value).toISOString() : '',
-        priority: priority.value, status: status.value, createdAt: a.createdAt || nowISO() };
+        priority: priority.value, status: status.value,
+        department: department.value,
+        createdAt: a.createdAt || nowISO() };
       if (idEdit) state.actions[state.actions.findIndex(x => x.id === idEdit)] = data;
-      else { state.actions.push(data); logMEL('ACTION', `Action : ${data.text} (${data.priority})`); }
+      else { state.actions.push(data); logMEL('ACTION', `Action [${data.department}] : ${data.text} (${data.priority})`); }
       save(); closeModal(); setTab('actions');
     };
     openModal(idEdit ? 'Éditer action' : 'Nouvelle action',
@@ -1037,6 +1103,7 @@
         field('Description', text),
         twoCol('Owner', owner, 'Échéance', due),
         twoCol('Priorité', priority, 'Statut', status),
+        field('Département', department),
         el('div', { class: 'flex', style: 'margin-top:14px' },
           el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
           el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
@@ -1581,39 +1648,65 @@
   // ============================================================
   //   SITREP
   // ============================================================
+  // ============================================================
+  //   SITREP CMA SHIPS (trame officielle)
+  // ============================================================
   renderers.sitrep = (root) => {
-    const inputs = {
-      classif: el('select', {}, ...['NON CLASSIFIÉ','DIFFUSION RESTREINTE','CONFIDENTIEL','SECRET'].map(c => el('option', { value: c }, c))),
-      dest: el('input', { value: 'COMEX CMA — État pavillon — P&I — Affréteur' }),
-      situation: el('textarea', { placeholder: 'Synthèse 3-5 lignes' }),
-      assessment: el('textarea', { placeholder: 'Évolution attendue (best/likely/worst)' }),
-      requests: el('textarea', { placeholder: 'Ressources / support requis' }),
-      next: el('input', { value: '+6H' }),
-      signature: el('input', { value: currentUserName() + ' — Direction de crise' })
-    };
-    const preview = el('pre', { class: 'sitrep-preview' }, '— Cliquez "Générer" —');
+    const today = new Date();
+    const ctx = el('input', { value: state.sitrepContext || '', placeholder: 'ex. J + 0 Group MM' });
+    const week = el('input', { value: state.weekNumber || isoWeekNumber(today), placeholder: 'S__' });
+    const dm = el('input', { value: state.dutyManager || currentUserName(), placeholder: 'Nom du DM Marseille' });
+    const mode = el('select', {}, ...window.MODES.map(m => el('option', { value: m.code, selected: state.alert === m.code }, m.label)));
+    const synthesis = el('textarea', { placeholder: 'Synthèse opérationnelle des dernières 24 h — 30 à 40 mots.' });
+    const vPort = el('input', { type: 'number', value: state.vesselsPort || 0 });
+    const vTransit = el('input', { type: 'number', value: state.vesselsTransit || 0 });
+    const doFM = el('input', { value: state.dutyOfficers.FM || '', placeholder: 'Nom DO FM (SG)' });
+    const doCR = el('input', { value: state.dutyOfficers.CR || '', placeholder: 'Nom DO CR (SG)' });
+    const doFU = el('input', { value: state.dutyOfficers.FU || '', placeholder: 'Nom DO FU (Chine)' });
+    const sFM = el('select', {}, ...[['green','VERT'],['amber','AMBRE'],['red','ROUGE']].map(([k,l]) => el('option', { value: k, selected: state.deptStatus.FM === k }, l)));
+    const sCR = el('select', {}, ...[['green','VERT'],['amber','AMBRE'],['red','ROUGE']].map(([k,l]) => el('option', { value: k, selected: state.deptStatus.CR === k }, l)));
+    const sFU = el('select', {}, ...[['green','VERT'],['amber','AMBRE'],['red','ROUGE']].map(([k,l]) => el('option', { value: k, selected: state.deptStatus.FU === k }, l)));
+
+    const preview = el('pre', { class: 'sitrep-preview' }, '— Cliquez "Générer" pour produire le SITREP CMA Ships —');
+
     const buildBtn = el('button', { class: 'btn-primary', onclick: () => {
       state.sitrepCounter = (state.sitrepCounter || 0) + 1;
-      const text = renderSITREP(inputs);
+      state.sitrepContext = ctx.value;
+      state.weekNumber = week.value;
+      state.dutyManager = dm.value;
+      state.alert = mode.value; applyAlertClass(); $('#alertSelect').value = state.alert;
+      state.vesselsPort = parseInt(vPort.value, 10) || 0;
+      state.vesselsTransit = parseInt(vTransit.value, 10) || 0;
+      state.dutyOfficers = { FM: doFM.value, CR: doCR.value, FU: doFU.value };
+      state.deptStatus = { FM: sFM.value, CR: sCR.value, FU: sFU.value };
+      const text = renderCMASitrep(synthesis.value);
       preview.textContent = text;
       state.sitreps.unshift({ id: id(), ts: nowISO(), num: state.sitrepCounter, text });
-      logMEL('INFO', `SITREP N°${state.sitrepCounter} généré`);
+      logMEL('INFO', `SITREP CMA Ships N°${state.sitrepCounter} généré (mode ${state.alert})`);
       save();
-    } }, '🛰 Générer SITREP');
+    } }, '📄 Générer SITREP');
     const printBtn = el('button', { class: 'btn-ghost', onclick: () => window.print() }, '🖨 Imprimer');
-    const dlBtn = el('button', { class: 'btn-ghost', onclick: () => download(`SITREP_${state.sitrepCounter || 'X'}.txt`, preview.textContent) }, '⬇ Télécharger');
+    const dlBtn = el('button', { class: 'btn-ghost', onclick: () => download(`SITREP_CMA_${state.sitrepCounter || 'X'}.txt`, preview.textContent) }, '⬇ Télécharger');
 
-    root.appendChild(panel('Générateur SITREP — format NATO 5 paragraphes',
+    root.appendChild(panel('SITREP CMA Ships — trame officielle',
       el('div', {},
-        twoCol('Classification', inputs.classif, 'Destinataires', inputs.dest),
-        field('1. Situation générale', inputs.situation),
-        field('7. Évaluation / évolution', inputs.assessment),
-        field('8. Demandes / support', inputs.requests),
-        twoCol('9. Prochain SITREP', inputs.next, 'Signature', inputs.signature),
-        el('div', { class: 'flex', style: 'margin-top:10px' }, buildBtn, printBtn, dlBtn))));
+        el('p', { class: 'muted' }, 'Diffusion VP + Heads + DM Marseille à 08h30. Consolide les 3 SITREPs départementaux (FM/CR/FU). Les dossiers du jour, échéances 24-72h et frictions sont remontés automatiquement depuis les onglets Incidents, Actions et Frictions taggés par département.'),
+        twoCol('Contexte', ctx, 'Semaine', week),
+        twoCol('Duty Manager Marseille', dm, 'Mode', mode),
+        twoCol('Navires en escale', vPort, 'Navires en passage', vTransit),
+        field('Synthèse 24 h (30-40 mots)', synthesis),
+        el('h4', { style: 'margin:14px 0 6px' }, 'Statuts départementaux & Duty Officers'),
+        twoCol('FM — Duty Officer', doFM, 'FM — Statut', sFM),
+        twoCol('CR — Duty Officer', doCR, 'CR — Statut', sCR),
+        twoCol('FU — Duty Officer', doFU, 'FU — Statut', sFU),
+        el('div', { class: 'flex', style: 'margin-top:10px' }, buildBtn, printBtn, dlBtn),
+        el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:8px' },
+          'Points pour Top Management, frictions, signaux faibles : à renseigner dans les onglets dédiés.')
+      )
+    ));
     root.appendChild(panel('Aperçu', preview));
     if (state.sitreps.length) {
-      root.appendChild(panel('Précédents',
+      root.appendChild(panel('SITREPs précédents',
         tableEl(['N°', 'Émis', ''], state.sitreps.map(s => [
           'N°' + s.num, fmtDTG(s.ts),
           el('div', { class: 'flex' },
@@ -1622,33 +1715,187 @@
         ]))));
     }
   };
-  function renderSITREP(inputs) {
-    const incs = state.incidents.filter(i => i.status !== 'closed');
-    const vessels = state.vessels.filter(v => v.status !== 'normal');
-    const actsDone = state.actions.filter(a => a.status === 'done').slice(0, 10);
-    const actsPlan = state.actions.filter(a => a.status !== 'done').slice(0, 10);
-    const decisions = state.decisions.slice(0, 5);
-    const fmtList = arr => arr.length === 0 ? 'Néant.' : arr.join('\n');
-    return window.SITREP_TEMPLATE
-      .replace('{DTG}', fmtDTG(nowISO()))
-      .replace('{NUM}', String(state.sitrepCounter || '-').padStart(3, '0'))
-      .replace('{DEST}', inputs.dest.value)
-      .replace('{CLASSIF}', inputs.classif.value)
-      .replace('{ALERT}', state.alert.toUpperCase() + ' / phase ' + state.phase)
-      .replace('{OPS}', state.opsPeriod || '-')
-      .replace('{SITUATION}', inputs.situation.value || '-')
-      .replace('{INCIDENTS}', fmtList(incs.map(i =>
-        ` - [${i.ref}] ${i.type} sur ${i.vessel || 'n/a'} — INES ${i.ines ?? '?'} / sev ${(i.severity || '?').toUpperCase()}${i.roe ? ' / ROE ' + i.roe : ''}\n   Démarré : ${fmtDTG(i.startedAt)}\n   ${(i.summary || '').replace(/\n/g, ' ')}`
-      )))
-      .replace('{VESSELS}', fmtList(vessels.map(v =>
-        ` - ${v.name} (IMO ${v.imo || '-'}) — ${v.status.toUpperCase()} — pos ${v.position || '-'}`)))
-      .replace('{ACTIONS_DONE}', fmtList(actsDone.map(a => ` - [${a.priority}] ${a.text} (${a.owner})`)))
-      .replace('{ACTIONS_PLANNED}', fmtList(actsPlan.map(a => ` - [${a.priority}] ${a.text} — ${a.owner}, due ${fmtDTG(a.due)}`)))
-      .replace('{DECISIONS}', fmtList(decisions.map(d => ` - ${d.title} — ${(d.decision || d.decide) || '(en cours)'} (${d.status})`)))
-      .replace('{ASSESSMENT}', inputs.assessment.value || '-')
-      .replace('{REQUESTS}', inputs.requests.value || 'Néant.')
-      .replace('{NEXT_SITREP}', inputs.next.value || '+6H')
-      .replace('{SIGNATURE}', inputs.signature.value || '-');
+
+  function isoWeekNumber(d) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return 'S' + String(Math.ceil((((date - yearStart) / 86400000) + 1) / 7)).padStart(2, '0');
+  }
+
+  function renderCMASitrep(synthesis) {
+    const fmt = (arr) => arr.length === 0 ? '  ▸ Néant.' : arr.map(s => '  ▸ ' + s).join('\n');
+    const today = new Date();
+    const dayStr = today.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const statutLbl = { nominal: 'VERT', vigilance: 'AMBRE', crise: 'ROUGE' }[state.alert] || 'VERT';
+    const modeLbl = { nominal: 'Nominal', vigilance: 'Vigilance', crise: 'Crise' }[state.alert] || 'Nominal';
+    const deptLetter = { green: 'V', amber: 'A', red: 'R' };
+
+    // Dossiers du jour = incidents actifs du département
+    const dossiersFor = (dept) => state.incidents
+      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept)
+      .map(i => `${i.vessel || 'n/a'} — ${i.type} — ${(i.summary || '').replace(/\n/g, ' ').slice(0, 200)}`);
+
+    // Échéances 24-72h = actions du dept dont due dans 24-72h
+    const now = Date.now();
+    const in24 = now + 24 * 3600 * 1000;
+    const in72 = now + 72 * 3600 * 1000;
+    const deadlinesFor = (dept) => state.actions
+      .filter(a => a.status !== 'done' && (a.department || 'XX') === dept &&
+                   a.due && new Date(a.due).getTime() >= in24 && new Date(a.due).getTime() <= in72)
+      .map(a => `${a.text} — owner ${a.owner || '—'} (${fmtDTG(a.due)})`);
+
+    // Frictions par dept
+    const frictionsFor = (scope) => (state.frictions || [])
+      .filter(f => f.status !== 'closed' && f.scope === scope)
+      .map(f => `${f.title}${f.owner ? ' — ' + f.owner : ''}${f.note ? ' — ' + f.note : ''}`);
+
+    const topMgmt = (state.topMgmtPoints || []).slice(0, 3);
+    const weakSig = state.weakSignals || [];
+
+    const frActives = (state.frictions || []).filter(f => f.status !== 'closed').length;
+    const alerts24 = state.mel.filter(m =>
+      ['SECURITY','SAFETY','INC'].includes(m.cat) &&
+      (Date.now() - new Date(m.ts).getTime()) <= 24 * 3600 * 1000).length;
+
+    return window.SITREP_CMA_TEMPLATE
+      .replace('{DAY}', dayStr)
+      .replace('{WEEK}', state.weekNumber || isoWeekNumber(today))
+      .replace('{CONTEXT}', state.sitrepContext || '—')
+      .replace('{DM_NAME}', state.dutyManager || '—')
+      .replace('{MODE}', modeLbl)
+      .replace('{STATUT}', statutLbl)
+      .replace('{SYNTHESIS}', synthesis || '—')
+      .replace('{VESSELS_PORT}', state.vesselsPort || 0)
+      .replace('{VESSELS_TRANSIT}', state.vesselsTransit || 0)
+      .replace('{FRICTIONS_COUNT}', frActives)
+      .replace('{ALERTS_24H}', alerts24)
+      .replace('{TOP_MGMT_POINTS}', topMgmt.length === 0
+        ? '  — Aucun point remonté au VP —'
+        : topMgmt.map((p, idx) => `  ${idx + 1}. ${p.label}`).join('\n'))
+      .replace('{FM_STATUS}', deptLetter[state.deptStatus.FM] || 'V')
+      .replace('{CR_STATUS}', deptLetter[state.deptStatus.CR] || 'V')
+      .replace('{FU_STATUS}', deptLetter[state.deptStatus.FU] || 'V')
+      .replace('{DO_FM}', state.dutyOfficers.FM || '—')
+      .replace('{DO_CR}', state.dutyOfficers.CR || '—')
+      .replace('{DO_FU}', state.dutyOfficers.FU || '—')
+      .replace('{FM_DOSSIERS}', fmt(dossiersFor('FM')))
+      .replace('{FM_DEADLINES}', fmt(deadlinesFor('FM')))
+      .replace('{FM_FRICTIONS}', fmt(frictionsFor('FM')))
+      .replace('{CR_DOSSIERS}', fmt(dossiersFor('CR')))
+      .replace('{CR_DEADLINES}', fmt(deadlinesFor('CR')))
+      .replace('{CR_FRICTIONS}', fmt(frictionsFor('CR')))
+      .replace('{FU_DOSSIERS}', fmt(dossiersFor('FU')))
+      .replace('{FU_DEADLINES}', fmt(deadlinesFor('FU')))
+      .replace('{FU_FRICTIONS}', fmt(frictionsFor('FU')))
+      .replace('{TRANSVERSE_FRICTIONS}', fmt(frictionsFor('XX')))
+      .replace('{WEAK_SIGNALS}', fmt(weakSig.map(s => `[${s.horizon}] ${s.label}`)));
+  }
+
+  // ============================================================
+  //   FRICTIONS (concept central CMA Ships)
+  // ============================================================
+  renderers.frictions = (root) => {
+    const byScope = (scope) => (state.frictions || []).filter(f => f.scope === scope);
+    const open = (state.frictions || []).filter(f => f.status !== 'closed');
+
+    root.appendChild(panel('Frictions actives',
+      el('div', {},
+        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
+          el('div', { class: 'muted' }, `${open.length} friction(s) ouverte(s) — alimentent les blocs "Frictions" du SITREP CMA Ships.`),
+          el('button', { class: 'btn-primary', onclick: () => frictionForm() }, '+ Nouvelle friction')
+        ),
+        open.length === 0 ? el('div', { class: 'empty' }, 'Aucune friction active.')
+          : tableEl(['Périmètre', 'Titre', 'Owner', 'Note', 'Statut', ''],
+            open.map(f => [
+              badge(f.scope, f.scope === 'XX' ? 'orange' : 'blue'),
+              el('strong', {}, f.title), f.owner || '—', f.note || '',
+              el('span', { class: 'editable', onclick: () => { f.status = f.status === 'closed' ? 'open' : 'closed'; save(); setTab('frictions'); } },
+                badge(f.status || 'open', f.status === 'closed' ? 'green' : 'orange')),
+              el('div', { class: 'flex' },
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => frictionForm(f.id) }, 'Éditer'),
+                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Supprimer ?')) { state.frictions = state.frictions.filter(x => x.id !== f.id); save(); setTab('frictions'); } } }, '✕'))
+            ])))
+    ));
+
+    // Top Management Points (3 max)
+    root.appendChild(panel('Points pour Top Management (3 max)',
+      el('div', {},
+        el('p', { class: 'muted' }, 'À l\'attention directe du VP avant Group MM — arbitrages, sujets stratégiques ou opportunités à signaler.'),
+        ...(state.topMgmtPoints || []).map(p => el('div', { class: 'pb-step' },
+          el('div', { class: 'pb-text' }, '• ' + p.label),
+          el('button', { class: 'btn-danger btn-sm', onclick: () => {
+            state.topMgmtPoints = state.topMgmtPoints.filter(x => x.id !== p.id);
+            save(); setTab('frictions');
+          } }, '✕'))),
+        (() => {
+          const inp = el('input', { placeholder: 'Nouveau point top management…' });
+          const add = el('button', { class: 'btn-primary btn-sm', onclick: () => {
+            if (!inp.value.trim()) return;
+            state.topMgmtPoints = state.topMgmtPoints || [];
+            if (state.topMgmtPoints.length >= 3) { toast('3 maximum — supprimez-en un d\'abord.', 'warn'); return; }
+            state.topMgmtPoints.push({ id: id(), label: inp.value.trim(), ts: nowISO() });
+            save(); setTab('frictions');
+          } }, '+ Ajouter');
+          inp.addEventListener('keydown', e => { if (e.key === 'Enter') add.click(); });
+          return el('div', { class: 'flex', style: 'margin-top:8px' }, inp, add);
+        })()
+      )
+    ));
+
+    // Signaux faibles / look-ahead J+1 / S+1
+    root.appendChild(panel('Signaux faibles & look-ahead',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Tendances, indicateurs faibles, événements anticipés J+1 ou S+1.'),
+        ...(state.weakSignals || []).map(s => el('div', { class: 'pb-step' },
+          badge(s.horizon, 'blue'),
+          el('div', { class: 'pb-text' }, ' ' + s.label),
+          el('button', { class: 'btn-danger btn-sm', onclick: () => {
+            state.weakSignals = state.weakSignals.filter(x => x.id !== s.id);
+            save(); setTab('frictions');
+          } }, '✕'))),
+        (() => {
+          const inp = el('input', { placeholder: 'Signal faible ou look-ahead…' });
+          const hSel = el('select', {}, el('option', { value: 'J+1' }, 'J+1'), el('option', { value: 'S+1' }, 'S+1'));
+          const add = el('button', { class: 'btn-primary btn-sm', onclick: () => {
+            if (!inp.value.trim()) return;
+            state.weakSignals = state.weakSignals || [];
+            state.weakSignals.push({ id: id(), label: inp.value.trim(), horizon: hSel.value, ts: nowISO() });
+            save(); setTab('frictions');
+          } }, '+ Ajouter');
+          inp.addEventListener('keydown', e => { if (e.key === 'Enter') add.click(); });
+          return el('div', { class: 'form-row cols-3', style: 'margin-top:8px' },
+            el('div', {}, inp), el('div', {}, hSel), el('div', {}, add));
+        })()
+      )
+    ));
+  };
+
+  function frictionForm(idEdit) {
+    const f = idEdit ? state.frictions.find(x => x.id === idEdit) : { scope: 'XX', status: 'open' };
+    const scope = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code, selected: f.scope === d.code }, d.code + ' — ' + d.label)));
+    const title = el('input', { value: f.title || '' });
+    const owner = el('input', { value: f.owner || currentUserName(), list: 'dl-owners' });
+    const note = el('textarea', {}, f.note || '');
+    const status = el('select', {}, el('option', { value: 'open', selected: f.status !== 'closed' }, 'Ouverte'), el('option', { value: 'closed', selected: f.status === 'closed' }, 'Clôturée'));
+    const submit = () => {
+      const data = { id: f.id || id(), scope: scope.value, title: title.value,
+        owner: owner.value, note: note.value, status: status.value, ts: f.ts || nowISO() };
+      if (idEdit) state.frictions[state.frictions.findIndex(x => x.id === idEdit)] = data;
+      else { state.frictions.push(data); logMEL('INFO', `Friction [${data.scope}] : ${data.title}`); }
+      save(); closeModal(); setTab('frictions');
+    };
+    openModal(idEdit ? 'Éditer friction' : 'Nouvelle friction',
+      el('div', {},
+        twoCol('Périmètre', scope, 'Owner', owner),
+        field('Titre', title),
+        field('Note / détails', note),
+        field('Statut', status),
+        el('div', { class: 'flex', style: 'margin-top:14px' },
+          el('button', { class: 'btn-primary', onclick: submit }, 'Valider'),
+          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+      ), { onSubmit: submit });
   }
 
   // ============================================================
@@ -2020,36 +2267,34 @@
   //   VEILLE — MOC (Maritime Operations Center)
   // ============================================================
   renderers.veille = (root) => {
-    const posture = (window.POSTURES.find(p => p.code === state.posture) || window.POSTURES[0]);
+    const mode = (window.MODES.find(m => m.code === state.alert) || window.MODES[0]);
     const recentTriggers = (state.triggerEvents || []).slice(0, 5);
 
-    // En-tête : posture + niveau d'alerte côte à côte
-    root.appendChild(panel('Posture courante',
+    root.appendChild(panel('Mode opérationnel',
       el('div', {},
         el('div', { class: 'flex', style: 'gap:12px;align-items:center;flex-wrap:wrap' },
           el('div', {},
-            el('div', { class: 'kpi-label' }, 'Posture'),
-            el('div', { style: 'font-size:22px;font-weight:700;color:var(--accent-2)' }, posture.label)),
+            el('div', { class: 'kpi-label' }, 'Mode'),
+            el('div', { style: 'font-size:22px;font-weight:700;color:var(--accent-2)' }, mode.label)),
           el('div', {},
-            el('div', { class: 'kpi-label' }, 'Niveau d\'alerte'),
-            el('div', { style: 'font-size:22px;font-weight:700' }, state.alert.toUpperCase())),
+            el('div', { class: 'kpi-label' }, 'Statut global'),
+            el('div', { style: 'font-size:22px;font-weight:700' }, mode.statut)),
           el('div', { style: 'flex:1' }),
           el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('triggers') }, '→ Critères'),
           el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('notif') }, '→ Modèles d\'alerte')
         ),
-        el('div', { class: 'muted', style: 'margin-top:8px' }, posture.desc)
+        el('div', { class: 'muted', style: 'margin-top:8px' }, mode.desc)
       )
     ));
 
-    // Boutons d'escalade / désescalade
     const escBox = el('div', { class: 'flex', style: 'gap:8px;flex-wrap:wrap' });
-    if (state.posture !== 'T0') escBox.appendChild(
-      el('button', { class: 'btn-success', onclick: () => escalateTo('T0') }, '↓ Désescalade vers T0'));
-    if (state.posture !== 'T1') escBox.appendChild(
-      el('button', { class: 'btn-warn', onclick: () => escalateTo('T1') }, '↑ Pré-alerte (T1)'));
-    if (state.posture !== 'T2') escBox.appendChild(
-      el('button', { class: 'btn-danger', onclick: () => escalateTo('T2') }, '⚡ Activer cellule (T2)'));
-    root.appendChild(panel('Escalade / désescalade', escBox));
+    if (state.alert !== 'nominal') escBox.appendChild(
+      el('button', { class: 'btn-success', onclick: () => escalateTo('nominal') }, '↓ Retour Nominal'));
+    if (state.alert !== 'vigilance') escBox.appendChild(
+      el('button', { class: 'btn-warn', onclick: () => escalateTo('vigilance') }, '↑ Vigilance (AMBRE)'));
+    if (state.alert !== 'crise') escBox.appendChild(
+      el('button', { class: 'btn-danger', onclick: () => escalateTo('crise') }, '⚡ Activer Crise (ROUGE)'));
+    root.appendChild(panel('Bascule de mode', escBox));
 
     // Quart en cours
     const w = state.watch || {};
@@ -2091,18 +2336,21 @@
         el('div', { class: 'qb-hint' }, 'L : focus rapide · Ctrl+Entrée : envoyer'))
     ));
 
-    // Triggers récents + accès rapide
     root.appendChild(panel('Déclenchements récents',
       recentTriggers.length === 0
         ? el('div', { class: 'empty' }, 'Aucun trigger déclaré sur les dernières 24 h. Tout est calme.')
-        : tableEl(['DTG', 'Catégorie', 'Trigger', 'Posture →', 'Par'],
-            recentTriggers.map(t => [
-              el('span', { class: 'mono' }, fmtDTG(t.ts)),
-              badge(t.cat, 'blue'),
-              t.label,
-              badge(t.posture, t.posture === 'T2' ? 'red' : t.posture === 'T1' ? 'orange' : 'yellow'),
-              t.author || '—'
-            ]))
+        : tableEl(['DTG', 'Catégorie', 'Trigger', 'Mode →', 'Par'],
+            recentTriggers.map(t => {
+              const m = t.mode || t.posture || t.level;
+              const mColor = m === 'crise' ? 'red' : m === 'vigilance' ? 'orange' : 'green';
+              return [
+                el('span', { class: 'mono' }, fmtDTG(t.ts)),
+                badge(t.cat, 'blue'),
+                t.label,
+                badge(m, mColor),
+                t.author || '—'
+              ];
+            }))
     ));
 
     // MEL des dernières heures
@@ -2113,19 +2361,17 @@
     ));
   };
 
-  function escalateTo(targetPosture) {
-    const target = window.POSTURES.find(p => p.code === targetPosture);
+  function escalateTo(targetMode) {
+    const target = window.MODES.find(m => m.code === targetMode);
     if (!target) return;
-    if (state.posture === targetPosture) return;
-    if (!confirm(`Passer en posture ${target.label} ?\n${target.desc}`)) return;
-    state.posture = targetPosture;
-    state.alert = target.expectedLevel;
+    if (state.alert === targetMode) return;
+    if (!confirm(`Passer en mode ${target.label} ?\n${target.desc}`)) return;
+    state.alert = targetMode;
     applyAlertClass();
     $('#alertSelect').value = state.alert;
-    logMEL('SECURITY', `Escalade → ${target.label} · niveau ${state.alert.toUpperCase()}`);
+    logMEL('SECURITY', `Bascule mode → ${target.label} (statut ${target.statut})`);
     save();
-    if (targetPosture !== 'T0') {
-      // Proposer d'ouvrir le modèle de notification correspondant
+    if (targetMode !== 'nominal') {
       if (confirm('Ouvrir le modèle de notification correspondant ?')) {
         setTab('notif');
         return;
@@ -2139,18 +2385,17 @@
   // ============================================================
   renderers.triggers = (root) => {
     const cats = [...new Set(window.TRIGGERS.map(t => t.cat))];
+    const modeColor = m => m === 'crise' ? 'red' : m === 'vigilance' ? 'orange' : 'green';
     root.appendChild(panel('Critères de déclenchement',
       el('div', {},
-        el('p', { class: 'muted' }, 'Liste pré-définie des critères qui font basculer la posture (T0/T1/T2) et le niveau d\'alerte. Cliquer "Déclarer" applique automatiquement la posture cible et crée un incident pré-rempli.'),
+        el('p', { class: 'muted' }, 'Liste pré-définie des critères qui font basculer le mode opérationnel CMA Ships. "Déclarer" applique automatiquement le mode cible (sans rétrogradation) et crée un incident pré-rempli.'),
         ...cats.map(c => el('div', { style: 'margin-bottom:14px' },
           el('h4', { style: 'margin:8px 0;color:var(--accent-2)' }, c),
-          tableEl(['Critère', 'Description', 'Posture →', 'Niveau →', ''],
+          tableEl(['Critère', 'Description', 'Mode →', ''],
             window.TRIGGERS.filter(t => t.cat === c).map(t => [
               el('strong', {}, t.label),
               el('span', { class: 'muted' }, t.desc),
-              badge(t.posture, t.posture === 'T2' ? 'red' : t.posture === 'T1' ? 'orange' : 'yellow'),
-              badge(t.level.toUpperCase(),
-                t.level === 'red' ? 'red' : t.level === 'orange' ? 'orange' : t.level === 'yellow' ? 'yellow' : 'green'),
+              badge((t.mode || 'nominal').toUpperCase(), modeColor(t.mode)),
               el('button', { class: 'btn-primary btn-sm', onclick: () => declareTrigger(t) }, 'Déclarer')
             ]))))
       )
@@ -2158,50 +2403,48 @@
 
     if (state.triggerEvents && state.triggerEvents.length) {
       root.appendChild(panel('Historique',
-        tableEl(['DTG', 'Catégorie', 'Trigger', 'Posture', 'Niveau', 'Navire', 'Par'],
-          state.triggerEvents.map(t => [
-            el('span', { class: 'mono' }, fmtDTG(t.ts)),
-            badge(t.cat, 'blue'), t.label,
-            badge(t.posture, t.posture === 'T2' ? 'red' : t.posture === 'T1' ? 'orange' : 'yellow'),
-            badge((t.level || '').toUpperCase(), t.level === 'red' ? 'red' : t.level === 'orange' ? 'orange' : 'yellow'),
-            t.vessel || '—', t.author || '—'
-          ]))));
+        tableEl(['DTG', 'Catégorie', 'Trigger', 'Mode', 'Navire', 'Par'],
+          state.triggerEvents.map(t => {
+            const m = t.mode || t.posture || 'nominal';
+            return [
+              el('span', { class: 'mono' }, fmtDTG(t.ts)),
+              badge(t.cat, 'blue'), t.label,
+              badge(m, modeColor(m)),
+              t.vessel || '—', t.author || '—'
+            ];
+          }))));
     }
   };
 
   function declareTrigger(trg) {
     const vesselSel = el('input', { list: 'dl-vessels', placeholder: 'Navire concerné (optionnel)' });
+    const deptSel = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code }, d.code + ' — ' + d.label)));
     const note = el('textarea', { placeholder: 'Précisions / contexte (optionnel)' });
     const submit = () => {
       const ev = {
         id: id(), ts: nowISO(),
         triggerId: trg.id, label: trg.label, cat: trg.cat,
-        posture: trg.posture, level: trg.level,
+        mode: trg.mode,
         vessel: vesselSel.value, note: note.value,
         author: currentUserName() || 'MOC'
       };
       state.triggerEvents = state.triggerEvents || [];
       state.triggerEvents.unshift(ev);
-      // Application automatique
-      const prevPosture = state.posture;
-      // On n'écrase que vers une posture plus élevée (ne jamais désescalader via trigger)
-      const order = { T0: 0, T1: 1, T2: 2 };
-      if (order[trg.posture] > order[prevPosture || 'T0']) state.posture = trg.posture;
-      // Niveau d'alerte : aussi vers le haut
-      const lvlOrder = { green: 0, yellow: 1, orange: 2, red: 3, black: 4 };
-      if (lvlOrder[trg.level] > lvlOrder[state.alert]) {
-        state.alert = trg.level;
+      // Mode : escalade seulement (jamais de rétrogradation auto)
+      const order = { nominal: 0, vigilance: 1, crise: 2 };
+      if ((order[trg.mode] || 0) > (order[state.alert] || 0)) {
+        state.alert = trg.mode;
         applyAlertClass();
         $('#alertSelect').value = state.alert;
       }
-      // Création d'un incident pré-rempli
       const incRef = 'INC-' + Date.now().toString(36).toUpperCase();
       state.incidents.push({
         id: id(), ref: incRef,
         type: trg.incidentType || 'Autre',
         vessel: vesselSel.value || '',
-        severity: trg.level === 'red' ? 'crit' : trg.level === 'orange' ? 'high' : 'med',
-        ines: trg.level === 'red' ? 5 : trg.level === 'orange' ? 4 : 2,
+        department: deptSel.value,
+        severity: trg.mode === 'crise' ? 'crit' : trg.mode === 'vigilance' ? 'high' : 'med',
+        ines: trg.mode === 'crise' ? 5 : trg.mode === 'vigilance' ? 4 : 2,
         roe: null,
         status: 'open', startedAt: ev.ts,
         summary: `[Trigger ${trg.label}] ${note.value || ''}`.trim()
@@ -2210,9 +2453,9 @@
         const v = state.vessels.find(x => x.name === vesselSel.value);
         if (v) v.status = 'incident';
       }
-      logMEL('SECURITY', `Trigger déclaré : ${trg.label} → posture ${state.posture}, niveau ${state.alert.toUpperCase()}, incident ${incRef}`);
+      logMEL('SECURITY', `Trigger déclaré : ${trg.label} → mode ${state.alert.toUpperCase()}, incident ${incRef}`);
       save(); closeModal();
-      if (confirm(`Trigger déclaré.\nPosture : ${state.posture} · Niveau : ${state.alert.toUpperCase()}\nIncident ${incRef} créé.\n\nOuvrir un modèle de notification maintenant ?`)) {
+      if (confirm(`Trigger déclaré.\nMode : ${state.alert.toUpperCase()}\nIncident ${incRef} créé.\n\nOuvrir un modèle de notification maintenant ?`)) {
         setTab('notif');
       } else {
         setTab('veille');
@@ -2221,10 +2464,9 @@
     openModal('Déclarer un trigger : ' + trg.label,
       el('div', {},
         el('div', { class: 'auth-warn' },
-          'Cette action va passer la posture en ', el('strong', {}, trg.posture),
-          ' et le niveau d\'alerte en ', el('strong', {}, trg.level.toUpperCase()),
-          ', créer un incident et tracer l\'événement dans le journal.'),
-        field('Navire concerné', vesselSel),
+          'Cette action va passer le mode opérationnel en ', el('strong', {}, (trg.mode || 'vigilance').toUpperCase()),
+          ' (si supérieur au courant), créer un incident pré-rempli, et tracer l\'événement dans le journal.'),
+        twoCol('Navire concerné', vesselSel, 'Département', deptSel),
         field('Note', note),
         el('div', { class: 'flex', style: 'margin-top:14px' },
           el('button', { class: 'btn-danger', onclick: submit }, '⚡ Confirmer le déclenchement'),
@@ -2238,7 +2480,7 @@
   renderers.notif = (root) => {
     root.appendChild(panel('Modèles d\'alerte (single voice)',
       el('div', {},
-        el('p', { class: 'muted' }, 'Messages pré-formatés à diffuser selon le palier déclenché. Variables auto-substituées : {VESSEL} {EVENT} {DTG} {AUTHOR} {LEVEL} {POSTURE}. Toujours faire valider par DIR avant diffusion externe.'),
+        el('p', { class: 'muted' }, 'Messages pré-formatés à diffuser. Variables auto : {VESSEL} {EVENT} {DTG} {AUTHOR} {LEVEL} {MODE} {DEPT}. Toujours faire valider par VP/DM avant diffusion externe.'),
         el('div', { class: 'cards' },
           ...window.NOTIF_TEMPLATES.map(tpl => el('div', { class: 'card' },
             el('div', { class: 'flex-between' },
@@ -2264,7 +2506,9 @@
         .replace(/\{DTG\}/g, fmtDTG(nowISO()))
         .replace(/\{AUTHOR\}/g, currentUserName() || 'MOC')
         .replace(/\{LEVEL\}/g, state.alert.toUpperCase())
-        .replace(/\{POSTURE\}/g, state.posture);
+        .replace(/\{POSTURE\}/g, state.alert.toUpperCase())
+        .replace(/\{MODE\}/g, state.alert.toUpperCase())
+        .replace(/\{DEPT\}/g, lastInc.department || 'XX');
     };
     vessel.addEventListener('input', refresh);
     event.addEventListener('input', refresh);
@@ -2327,6 +2571,7 @@
         } else {
           if (!confirm('Importer cet état (en clair) dans le coffre courant ?')) return;
           state = Object.assign(defaultState(), data);
+          migrateState();
           await CrisisAuth.saveState(state);
           applyAlertClass();
           $('#alertSelect').value = state.alert;

@@ -50,7 +50,7 @@ inaccessibles sans le mot de passe.
 2. **Incidents** — création / suivi / clôture avec **niveau INES** (0-7), **niveau ROE** (1-5 BMP5), **Commander's Intent** et **End-State**.
 3. **Navires** — registre flotte (Normal / À risque / Incident / Sécurisé / Port refuge).
 4. **MEL** — Main Events Log horodaté UTC, immuable, exportable.
-5. **Cellule** — équipe d'astreinte. Organisation simplifiée en 6 fonctions : **DIR** (Direction), **OPS** (Opérations navires, intègre DPA/CSO/HSE), **COM** (Communication), **ANT** (Anticipation), **SUP** (Soutien : juridique/HR/IT/logistique), **QRT** (Officier de quart).
+5. **Cellule** — organisation CMA Ships. Couche permanente : **Duty Manager Marseille** (rotation hebdo) + **3 Duty Officers Asie-Pacifique** (FM/CR Singapour HO, FU Chine — Cosco Zhoushan/Shanghai). Inchangée : VP + 3 Heads of Department (FM/CR/FU). Voir Note d'organisation CMA Ships.
 6. **Actions** — P1/P2/P3, owner, échéance, **clic sur statut pour cycle**.
 7. **Décisions** — journal des décisions (contexte / décision / mise en œuvre).
 8. **Anticipation** — *cellule prospective REX nucléaire* H+6/24/72 best/likely/worst + signaux à surveiller.
@@ -60,7 +60,7 @@ inaccessibles sans le mot de passe.
 12. **Risques** — matrice 5×5 cliquable.
 13. **Battle rhythm** — cadence des briefings.
 14. **Passation de quart** — *handover naval avec checklist + sign-off de la relève* + pré-remplissage automatique.
-15. **SITREP** — générateur NATO 5 paragraphes, classification, imprimable, téléchargeable.
+15. **SITREP** — générateur **CMA Ships** (trame officielle) : header Mode/Statut, KPIs (escales/passages/frictions/alertes 24 h), Points pour Top Management (3 max), 3 blocs département (Dossiers / Échéances 24-72 h / Frictions), Frictions transverses, Signaux faibles / Look-ahead J+1 / S+1. Dossiers et échéances remontés automatiquement des onglets Incidents et Actions taggés FM/CR/FU.
 16. **OPORD** — *générateur d'ordre d'opération* 5 paragraphes (Situation/Mission/Exécution/Soutien/Cdt-Trans), avec intention, end-state, no-go.
 17. **Playbooks** — 12 checklists d'urgence maritime activables (création automatique des actions).
 18. **CCIR** — PIR / FFIR / EEFI.

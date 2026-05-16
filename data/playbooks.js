@@ -381,39 +381,121 @@ window.HANDOVER_CHECKLIST = [
   'Documents et coordonnées partagés (canal, lien, classification)'
 ];
 
-// Organisation simplifiée de la cellule — 6 fonctions clés.
-// Une fonction = une responsabilité claire ; plusieurs personnes peuvent
-// être affectées sous une même fonction (binôme jour/nuit, expert, etc.).
+// Organisation CMA Ships — VP + 3 Heads + couche de permanence
+// (1 Duty Manager Marseille + 3 Duty Officers Asie-Pacifique).
+// Voir Note d'organisation CMA Ships.
 window.ROLES = [
-  { code: 'DIR', name: 'Direction de crise',
-    desc: 'Pilote la cellule, valide les décisions stratégiques et la communication externe.' },
-  { code: 'OPS', name: 'Cellule Opérations',
-    desc: 'Pilotage opérationnel des navires (DPA, technique, sûreté CSO, HSE). Lien avec le bord.' },
-  { code: 'COM', name: 'Cellule Communication',
-    desc: 'Communication interne, externe, presse, familles, autorités. Single voice.' },
-  { code: 'ANT', name: 'Cellule Anticipation',
-    desc: 'Prospective H+6/24/72, scénarios best/likely/worst, signaux faibles.' },
-  { code: 'SUP', name: 'Cellule Soutien',
-    desc: 'Juridique (P&I, contentieux), HR, logistique, IT/cyber, finance, agences.' },
-  { code: 'QRT', name: 'Officier de quart',
-    desc: 'Astreinte 24/7, journal MEL, passations, relais nuit/jour.' }
+  { code: 'VP',   name: 'Vice-President CMA Ships',
+    desc: 'Stratégique : Group MM hebdo, relations Groupe, clients stratégiques, autorités, RH N-1. Autorité ultime.' },
+  { code: 'HFM',  name: 'Head of Fleet Management',
+    desc: 'Hiérarchique équipe FM, décisions structurantes département, profondeur métier.' },
+  { code: 'HCR',  name: 'Head of Crewing',
+    desc: 'Hiérarchique équipe Crewing, décisions structurantes département.' },
+  { code: 'HFU',  name: 'Head of Fleet Upgrade',
+    desc: 'Hiérarchique équipe FU, décisions structurantes département.' },
+  { code: 'DM',   name: 'Duty Manager Marseille',
+    desc: 'Couche permanence — rotation hebdo. Anime Daily 09:00, consolide SITREP, tient Duty Log, escalade au VP.' },
+  { code: 'DOFM', name: 'Duty Officer FM — Singapour HO',
+    desc: 'Permanence FM Asie-Pacifique (rotation hebdo). Produit SITREP départemental, monitoring nuit Europe.' },
+  { code: 'DOCR', name: 'Duty Officer Crewing — Singapour HO',
+    desc: 'Permanence Crewing Asie-Pacifique (rotation hebdo).' },
+  { code: 'DOFU', name: 'Duty Officer Fleet Upgrade — Chine',
+    desc: 'Permanence FU Asie-Pacifique (Cosco Zhoushan, Shanghai). Project Managers sur sites.' }
 ];
 
-// ============================================================
-//   VEILLE PERMANENTE — MOC (Maritime Operations Center)
-// ============================================================
-// 3 paliers d'engagement : T0 veille, T1 pré-alerte, T2 cellule activée.
-window.POSTURES = [
-  { code: 'T0', label: 'T0 — Veille',
-    desc: 'MOC seul (DPA-Watch + Watch Assistant 24/7). Aucune cellule mobilisée.',
-    expectedLevel: 'green' },
-  { code: 'T1', label: 'T1 — Pré-alerte',
-    desc: 'MOC + Direction + Opérations + Communication mobilisés. Conf-call < 15 min.',
-    expectedLevel: 'orange' },
-  { code: 'T2', label: 'T2 — Cellule activée',
-    desc: 'Toutes fonctions mobilisées (DIR/OPS/COM/ANT/SUP/QRT). Battle rhythm + SITREP cycle 6 h.',
-    expectedLevel: 'red' }
+// Les 3 départements core business CMA Ships.
+window.DEPARTMENTS = [
+  { code: 'FM', label: 'Fleet Management',  doLocation: 'Singapour HO',          headRole: 'HFM', doRole: 'DOFM' },
+  { code: 'CR', label: 'Crewing',           doLocation: 'Singapour HO',          headRole: 'HCR', doRole: 'DOCR' },
+  { code: 'FU', label: 'Fleet Upgrade',     doLocation: 'Chine — site',          headRole: 'HFU', doRole: 'DOFU' },
+  { code: 'XX', label: 'Transverse / autre', doLocation: '',                     headRole: '',    doRole: '' }
 ];
+
+// Modes opérationnels CMA Ships — alignés sur statut global SITREP.
+window.MODES = [
+  { code: 'nominal',   label: 'Nominal',   statut: 'VERT',  color: 'green',
+    desc: 'Fonctionnement courant — MOC seul, SITREP quotidien, rituels standard.' },
+  { code: 'vigilance', label: 'Vigilance', statut: 'AMBRE', color: 'amber',
+    desc: 'Renforcement — frictions actives, points d\'attention, HoD informés.' },
+  { code: 'crise',     label: 'Crise',     statut: 'ROUGE', color: 'red',
+    desc: 'Cellule de crise activée — VP impliqué, battle rhythm court, escalade Groupe.' }
+];
+
+// SITREP CMA Ships — trame officielle.
+window.SITREP_CMA_TEMPLATE = `╔══════════════════════════════════════════════════════════════╗
+║                    CMA SHIPS — SITREP                        ║
+╚══════════════════════════════════════════════════════════════╝
+{DAY}   ·   Semaine {WEEK}   ·   {CONTEXT}
+Duty Manager Marseille : {DM_NAME}
+Mode : {MODE}
+
+──── STATUT GLOBAL : {STATUT} ────
+
+▸ SYNTHÈSE 24 h
+{SYNTHESIS}
+
+▸ KPIs
+  • Navires en escale       : {VESSELS_PORT}
+  • Navires en passage      : {VESSELS_TRANSIT}
+  • Frictions actives       : {FRICTIONS_COUNT}
+  • Alertes sécurité 24 h   : {ALERTS_24H}
+
+◆ POINTS POUR TOP MANAGEMENT
+  À l'attention directe du VP avant Group MM
+{TOP_MGMT_POINTS}
+
+────────────────────────────────────────────────────────────────
+  FLEET MANAGEMENT                            Statut [{FM_STATUS}]
+  Duty Officer (Singapour HO) — {DO_FM}
+────────────────────────────────────────────────────────────────
+Dossiers du jour
+{FM_DOSSIERS}
+
+Échéances 24-72 h
+{FM_DEADLINES}
+
+Frictions à signaler
+{FM_FRICTIONS}
+
+────────────────────────────────────────────────────────────────
+  CREWING                                     Statut [{CR_STATUS}]
+  Duty Officer (Singapour HO) — {DO_CR}
+────────────────────────────────────────────────────────────────
+Dossiers du jour
+{CR_DOSSIERS}
+
+Échéances 24-72 h
+{CR_DEADLINES}
+
+Frictions à signaler
+{CR_FRICTIONS}
+
+────────────────────────────────────────────────────────────────
+  FLEET UPGRADE                               Statut [{FU_STATUS}]
+  Duty Officer (Chine — site) — {DO_FU}
+────────────────────────────────────────────────────────────────
+Dossiers du jour
+{FU_DOSSIERS}
+
+Échéances 24-72 h
+{FU_DEADLINES}
+
+Frictions à signaler
+{FU_FRICTIONS}
+
+════════════════════════════════════════════════════════════════
+  FRICTIONS TRANSVERSES
+════════════════════════════════════════════════════════════════
+{TRANSVERSE_FRICTIONS}
+
+════════════════════════════════════════════════════════════════
+  SIGNAUX FAIBLES / LOOK-AHEAD  J+1 / S+1
+════════════════════════════════════════════════════════════════
+{WEAK_SIGNALS}
+`;
+
+// Conservé pour compat ascendante des triggers : alias vers les MODES CMA.
+window.POSTURES = window.MODES;
 
 // Critères de déclenchement — chaque trigger applique automatiquement
 // une posture + un niveau d'alerte si déclaré par le MOC.
@@ -421,71 +503,71 @@ window.TRIGGERS = [
   // ---- Auto-T2 / ROUGE ----
   { id: 'trg-ssas', cat: 'Sûreté', label: 'Alerte SSAS reçue',
     desc: 'Ship Security Alert System déclenché — menace sûreté avérée.',
-    posture: 'T2', level: 'red', incidentType: 'Sûreté' },
+    mode: 'crise', incidentType: 'Sûreté' },
   { id: 'trg-mayday', cat: 'Sécurité', label: 'MAYDAY / détresse vérifiée',
     desc: 'Vie humaine en danger imminent, navire/équipage en détresse.',
-    posture: 'T2', level: 'red', incidentType: 'Autre' },
+    mode: 'crise', incidentType: 'Autre' },
   { id: 'trg-fire-major', cat: 'Sécurité', label: 'Incendie majeur non maîtrisé',
     desc: 'Incendie non éteint à T+30 min ou propagation hors compartiment.',
-    posture: 'T2', level: 'red', incidentType: 'Incendie' },
+    mode: 'crise', incidentType: 'Incendie' },
   { id: 'trg-collision-cas', cat: 'Sécurité', label: 'Collision avec pertes humaines',
     desc: 'Abordage avec décès ou disparus.',
-    posture: 'T2', level: 'red', incidentType: 'Collision' },
+    mode: 'crise', incidentType: 'Collision' },
   { id: 'trg-hostage', cat: 'Sûreté', label: 'Prise d\'otages confirmée',
     desc: 'Équipage retenu, négociation requise.',
-    posture: 'T2', level: 'red', incidentType: 'Piraterie' },
+    mode: 'crise', incidentType: 'Piraterie' },
   { id: 'trg-ais-loss', cat: 'Sûreté', label: 'Perte AIS en zone HRA > 30 min',
     desc: 'Disparition signal AIS d\'un navire en High Risk Area.',
-    posture: 'T2', level: 'red', incidentType: 'Sûreté' },
+    mode: 'crise', incidentType: 'Sûreté' },
   { id: 'trg-sinking', cat: 'Sécurité', label: 'Naufrage / abandon imminent',
     desc: 'Mise à l\'eau des LSA, navire perdu.',
-    posture: 'T2', level: 'red', incidentType: 'Autre' },
+    mode: 'crise', incidentType: 'Autre' },
 
   // ---- Auto-T1 / ORANGE ----
   { id: 'trg-medevac', cat: 'Médical', label: 'MEDEVAC requis',
     desc: 'Évacuation médicale d\'un membre d\'équipage.',
-    posture: 'T1', level: 'orange', incidentType: 'Médical' },
+    mode: 'vigilance', incidentType: 'Médical' },
   { id: 'trg-death', cat: 'Médical', label: 'Décès à bord',
     desc: 'Décès d\'un membre d\'équipage ou passager.',
-    posture: 'T1', level: 'orange', incidentType: 'Médical' },
+    mode: 'vigilance', incidentType: 'Médical' },
   { id: 'trg-grounding', cat: 'Sécurité', label: 'Échouement',
     desc: 'Navire échoué, intégrité à évaluer.',
-    posture: 'T1', level: 'orange', incidentType: 'Échouement' },
+    mode: 'vigilance', incidentType: 'Échouement' },
   { id: 'trg-collision', cat: 'Sécurité', label: 'Collision sans victime',
     desc: 'Abordage sans pertes humaines, dommages à évaluer.',
-    posture: 'T1', level: 'orange', incidentType: 'Collision' },
+    mode: 'vigilance', incidentType: 'Collision' },
   { id: 'trg-pollution', cat: 'Environnement', label: 'Pollution / rejet > 1 m³',
     desc: 'Rejet hydrocarbures ou produit chimique au-delà du seuil.',
-    posture: 'T1', level: 'orange', incidentType: 'Pollution' },
+    mode: 'vigilance', incidentType: 'Pollution' },
   { id: 'trg-cyber-ot', cat: 'Cyber', label: 'Cyber-incident OT confirmé',
     desc: 'Compromission ECDIS, GMDSS, machine ou équipement de navigation.',
-    posture: 'T1', level: 'orange', incidentType: 'Cyber' },
+    mode: 'vigilance', incidentType: 'Cyber' },
   { id: 'trg-psc-detention', cat: 'Réglementaire', label: 'Détention PSC',
     desc: 'Port State Control immobilise le navire.',
-    posture: 'T1', level: 'orange', incidentType: 'Sûreté' },
+    mode: 'vigilance', incidentType: 'Sûreté' },
   { id: 'trg-press', cat: 'Médiatique', label: 'Mention presse navire CMA',
     desc: 'Apparition d\'un navire CMA dans la presse / réseaux sociaux sur incident.',
-    posture: 'T1', level: 'orange', incidentType: 'Autre' },
+    mode: 'vigilance', incidentType: 'Autre' },
   { id: 'trg-mob', cat: 'Sécurité', label: 'Homme à la mer (MOB)',
     desc: 'MOB confirmé, manœuvre de récupération en cours.',
-    posture: 'T1', level: 'orange', incidentType: 'MOB' },
+    mode: 'vigilance', incidentType: 'MOB' },
 
   // ---- Vigilance JAUNE (le MOC suit, pas de mobilisation) ----
   { id: 'trg-skiff', cat: 'Sûreté', label: 'Approche suspecte (skiff)',
     desc: 'Embarcation non identifiée s\'approche, pas d\'agression confirmée.',
-    posture: 'T0', level: 'yellow', incidentType: 'Piraterie' },
+    mode: 'vigilance', incidentType: 'Piraterie' },
   { id: 'trg-weather', cat: 'Environnement', label: 'Météo extrême sur route',
     desc: 'Cyclone tropical, glace, état de mer > 9 sur route prévue.',
-    posture: 'T0', level: 'yellow', incidentType: 'Autre' },
+    mode: 'vigilance', incidentType: 'Autre' },
   { id: 'trg-geopol', cat: 'Sûreté', label: 'Tension géopolitique sur transit',
     desc: 'Bab-el-Mandeb, Hormuz, Taïwan, mer Noire — escalade en cours.',
-    posture: 'T0', level: 'yellow', incidentType: 'Sûreté' },
+    mode: 'vigilance', incidentType: 'Sûreté' },
   { id: 'trg-stowaway', cat: 'Sûreté', label: 'Clandestins à bord',
     desc: 'Découverte de passagers clandestins.',
-    posture: 'T0', level: 'yellow', incidentType: 'Sûreté' },
+    mode: 'vigilance', incidentType: 'Sûreté' },
   { id: 'trg-psc-major', cat: 'Réglementaire', label: 'Déficience PSC majeure',
     desc: 'Inspection PSC avec déficience non détaining mais sérieuse.',
-    posture: 'T0', level: 'yellow', incidentType: 'Sûreté' }
+    mode: 'vigilance', incidentType: 'Sûreté' }
 ];
 
 // Modèles de notification — single voice, à adapter avant envoi.

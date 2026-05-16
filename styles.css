@@ -928,3 +928,14 @@ details.adv[open] > summary { color: var(--text); }
 
 /* Fix : l'attribut HTML `hidden` doit toujours masquer, peu importe display */
 [hidden] { display: none !important; }
+
+/* Mode CMA Ships : nominal / vigilance / crise */
+body.alert-nominal   .alert-dot { color: var(--ok);     background: var(--ok); }
+body.alert-vigilance .alert-dot { color: var(--orange); background: var(--orange); }
+body.alert-crise     .alert-dot { color: var(--danger); background: var(--danger); animation: pulse 1.4s infinite; }
+body.alert-crise .topbar { background: linear-gradient(90deg, #2a0a0f, #5b0d18); }
+
+/* Statut département SITREP : VERT/AMBRE/ROUGE */
+.dept-status-v { color: var(--ok); }
+.dept-status-a { color: var(--orange); }
+.dept-status-r { color: var(--danger); }
