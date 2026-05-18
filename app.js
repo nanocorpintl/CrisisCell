@@ -807,6 +807,10 @@
     const status = el('select', {}, ...['open','monitoring','closed'].map(s => el('option', { value: s, selected: inc.status === s }, s)));
     const startedAt = el('input', { type: 'datetime-local', value: inc.startedAt ? new Date(inc.startedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16) });
     const summary = el('textarea', { placeholder: 'Description : qui, quoi, où, conséquence opérationnelle, action en cours' }, inc.summary || '');
+    const sitrepLine = el('input', {
+      placeholder: 'Synthèse en UNE LIGNE qui apparaîtra dans le SITREP du DO',
+      value: inc.sitrepLine || ''
+    });
 
     const submit = () => {
       const data = {
@@ -816,7 +820,8 @@
         severity: severity.value,
         status: status.value,
         startedAt: new Date(startedAt.value).toISOString(),
-        summary: summary.value
+        summary: summary.value,
+        sitrepLine: sitrepLine.value || `${vessel.value || 'n/a'} — ${type.value}` + (summary.value ? ' : ' + summary.value.split('\n')[0].slice(0, 120) : '')
       };
       if (idEdit) {
         state.incidents[state.incidents.findIndex(i => i.id === idEdit)] = data;
@@ -841,7 +846,8 @@
       twoCol('Type', type, 'Navire', vessel),
       twoCol('Sévérité', severity, 'Statut', status),
       field('Date début', startedAt),
-      field('Description', summary),
+      field('Synthèse une ligne (apparaît dans le SITREP du DO)', sitrepLine),
+      field('Description détaillée', summary),
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Mettre à jour' : 'Créer'),
         el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
@@ -1666,47 +1672,110 @@
       const status = el('select', {}, ...[['green','VERT'],['amber','AMBRE'],['red','ROUGE']]
         .map(([k, l]) => el('option', { value: k, selected: d.status === k }, l)));
       const doName = el('input', { value: state.dutyOfficers[dept] || currentUserName(), placeholder: 'Nom DO ' + dept });
-      const dossiers = el('textarea', {
-        placeholder: 'Un dossier par ligne — ex. "CC MAUI : crack on ME starting air manifold, 4 days SGP 25/06"',
-        style: 'min-height:120px'
-      }, d.dossiers || '');
-      const deadlines = el('textarea', {
-        placeholder: 'Échéances 24-72 h — une par ligne',
-        style: 'min-height:90px'
-      }, d.deadlines || '');
-      const frictionsTxt = el('textarea', {
-        placeholder: 'Frictions à signaler — une par ligne',
-        style: 'min-height:80px'
-      }, d.frictions || '');
+
+      // Dossiers du jour : auto-aggregation depuis l'onglet Dossiers
+      // (synthèse une-ligne `sitrepLine` de chaque dossier ouvert du dépt)
+      const openDossiers = state.incidents
+        .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept);
+
+      const dossiersPreview = el('div', {},
+        openDossiers.length === 0
+          ? el('div', { class: 'empty', style: 'padding:14px' }, 'Aucun dossier ouvert pour ' + dept + '. Ajouter un dossier dans l\'onglet "Dossiers" pour qu\'il apparaisse ici.')
+          : el('div', {}, ...openDossiers.map(i => el('div', {
+              class: 'pb-step',
+              style: 'cursor:pointer',
+              onclick: () => incidentForm(i.id)
+            },
+              badge(i.severity || 'med', severityColor(i.severity)),
+              el('div', { class: 'pb-text', style: 'flex:1' },
+                el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref + ' · '),
+                i.sitrepLine || (i.vessel || 'n/a') + ' — ' + i.type)
+            )))
+      );
+
+      // Échéances 24-72 h : auto depuis Actions du dept
+      const now = Date.now();
+      const in24 = now + 24 * 3600 * 1000;
+      const in72 = now + 72 * 3600 * 1000;
+      const dueActions = state.actions
+        .filter(a => a.status !== 'done' && (a.department || 'XX') === dept &&
+                     a.due && new Date(a.due).getTime() >= in24 && new Date(a.due).getTime() <= in72);
+      const deadlinesPreview = el('div', {},
+        dueActions.length === 0
+          ? el('div', { class: 'empty', style: 'padding:14px' }, 'Aucune échéance dans la fenêtre 24-72 h.')
+          : el('div', {}, ...dueActions.map(a => el('div', { class: 'pb-step' },
+              badge(a.priority || 'P3', a.priority === 'P1' ? 'red' : 'blue'),
+              el('div', { class: 'pb-text', style: 'flex:1' },
+                a.text, el('span', { class: 'muted', style: 'font-size:11px' }, ' — ' + (a.owner || '—') + ' (' + fmtDTG(a.due) + ')'))
+            )))
+      );
+
+      // Frictions du dept (auto depuis Frictions)
+      const deptFrictions = (state.frictions || []).filter(f => f.status !== 'closed' && f.scope === dept);
+      const frictionsPreview = el('div', {},
+        deptFrictions.length === 0
+          ? el('div', { class: 'empty', style: 'padding:14px' }, 'Aucune friction dans le périmètre ' + dept + '.')
+          : el('div', {}, ...deptFrictions.map(f => el('div', { class: 'pb-step' },
+              el('div', { class: 'pb-text' }, '• ', el('strong', {}, f.title), f.note ? ' — ' + f.note : '')
+            )))
+      );
+
+      const notesTxt = el('textarea', {
+        placeholder: 'Notes additionnelles pour votre bloc SITREP (optionnel) — contexte, points d\'attention non couverts par les dossiers',
+        style: 'min-height:60px'
+      }, d.deadlines || ''); // on réutilise le champ "deadlines" du schéma comme "notes complémentaires"
 
       const submit = () => {
         state.dutyOfficers[dept] = doName.value;
         state.deptSitreps[dept] = {
           status: status.value,
-          dossiers: dossiers.value,
-          deadlines: deadlines.value,
-          frictions: frictionsTxt.value,
+          dossiers: '',   // déprécié : sourcé désormais des dossiers
+          deadlines: notesTxt.value,  // utilisé comme "notes complémentaires"
+          frictions: '',  // déprécié : sourcé des frictions
           updatedAt: nowISO(),
           updatedBy: currentUserName() || doName.value
         };
-        logMEL('DOSIT', `Mon SITREP ${dept} mis à jour par ${state.deptSitreps[dept].updatedBy}`);
-        toast('Bloc ' + dept + ' sauvegardé — visible dans le SITREP CMA Ships', 'ok');
+        logMEL('DOSIT', `Mon SITREP ${dept} validé par ${state.deptSitreps[dept].updatedBy}`);
+        toast('Bloc ' + dept + ' validé — visible dans le SITREP CMA Ships', 'ok');
         save();
         drawForm();
       };
 
       formWrap.appendChild(el('div', {},
         twoCol('Statut département', status, 'Duty Officer (nom)', doName),
-        field('Dossiers du jour', dossiers),
-        field('Échéances 24-72 h', deadlines),
-        field('Frictions à signaler', frictionsTxt),
+
+        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
+          'Dossiers du jour ',
+          el('span', { class: 'muted', style: 'font-weight:normal;font-size:11.5px' },
+            '· auto depuis l\'onglet "Dossiers" (synthèse une-ligne de chaque dossier ouvert)')),
+        dossiersPreview,
+        el('div', { style: 'margin-top:6px' },
+          el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('incidents') }, '→ Gérer mes dossiers')),
+
+        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
+          'Échéances 24-72 h ',
+          el('span', { class: 'muted', style: 'font-weight:normal;font-size:11.5px' }, '· auto depuis les Actions')),
+        deadlinesPreview,
+        el('div', { style: 'margin-top:6px' },
+          el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('actions') }, '→ Gérer mes actions')),
+
+        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
+          'Frictions à signaler ',
+          el('span', { class: 'muted', style: 'font-weight:normal;font-size:11.5px' }, '· auto depuis les Frictions de ' + dept)),
+        frictionsPreview,
+        el('div', { style: 'margin-top:6px' },
+          el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('frictions') }, '→ Voir les frictions')),
+
+        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Notes additionnelles (optionnel)'),
+        notesTxt,
+
         d.updatedAt
-          ? el('div', { class: 'muted', style: 'font-size:11.5px' },
-              'Dernière mise à jour : ' + fmtDTG(d.updatedAt) + ' · par ' + (d.updatedBy || '—'))
-          : el('div', { class: 'muted', style: 'font-size:11.5px' }, 'Jamais renseigné.'),
+          ? el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:10px' },
+              'Dernière validation : ' + fmtDTG(d.updatedAt) + ' · par ' + (d.updatedBy || '—'))
+          : el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:10px' }, 'Jamais validé.'),
         el('div', { class: 'flex', style: 'margin-top:10px' },
-          el('button', { class: 'btn-primary', onclick: submit }, '💾 Sauvegarder mon bloc'),
-          el('button', { class: 'btn-ghost', onclick: () => setTab('sitrep') }, '→ Voir SITREP CMA Ships'))
+          el('button', { class: 'btn-primary', onclick: submit }, '✓ Valider mon bloc'),
+          el('button', { class: 'btn-ghost', onclick: () => setTab('sitrep') }, '→ SITREP CMA Ships'))
       ));
     };
 
@@ -1715,7 +1784,7 @@
     root.appendChild(panel('Mon SITREP départemental',
       el('div', {},
         el('p', { class: 'muted' },
-          'Vous êtes Duty Officer FM, CR ou FU : rédigez ici votre bloc département. Il est repris automatiquement par le Duty Manager dans le SITREP CMA Ships consolidé (08h30 Marseille). Texte libre — une ligne par item recommandé.'),
+          'Vue Duty Officer. Statut V/A/R et nom DO à renseigner. Les "Dossiers du jour", "Échéances 24-72 h" et "Frictions à signaler" sont remontés automatiquement depuis vos onglets Dossiers, Actions et Frictions. Pour ajouter une ligne au SITREP, créez un dossier dans l\'onglet "Dossiers" et renseignez son champ "Synthèse une ligne".'),
         twoCol('Département', deptSel, '', el('span')),
         formWrap
       )
@@ -1804,10 +1873,11 @@
     const modeLbl = { nominal: 'Nominal', vigilance: 'Vigilance', crise: 'Crise' }[state.alert] || 'Nominal';
     const deptLetter = { green: 'V', amber: 'A', red: 'R' };
 
-    // Dossiers du jour = incidents actifs du département
+    // Dossiers du jour = synthèse une ligne (sitrepLine) de chaque dossier
+    // ouvert du département. Fallback : vessel — type — résumé tronqué.
     const dossiersFor = (dept) => state.incidents
       .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept)
-      .map(i => `${i.vessel || 'n/a'} — ${i.type} — ${(i.summary || '').replace(/\n/g, ' ').slice(0, 200)}`);
+      .map(i => i.sitrepLine || `${i.vessel || 'n/a'} — ${i.type}` + (i.summary ? ' : ' + i.summary.replace(/\n/g, ' ').slice(0, 120) : ''));
 
     // Échéances 24-72h = actions du dept dont due dans 24-72h
     const now = Date.now();
@@ -2275,25 +2345,22 @@
       )
     ));
 
-    // Saisie ultra-rapide MEL (le seul outil que le MOC utilise tout le temps)
-    const qbCat = el('select', {}, ...['INFO','INC','SECURITY','SAFETY','VESSEL','COMMS','MEDIA','OTHER']
-      .map(c => el('option', { value: c }, c)));
-    const qbAuthor = el('input', { value: w.officer || currentUserName(), list: 'dl-authors' });
-    const qbText = el('textarea', { placeholder: 'Saisie rapide d\'événement (Ctrl+Entrée)…' });
-    const qbBtn = el('button', { class: 'btn-primary', onclick: () => {
-      if (!qbText.value.trim()) return;
-      logMEL(qbCat.value, qbText.value.trim(), qbAuthor.value || 'MOC');
-      qbText.value = '';
-      toast('Événement consigné', 'ok');
-      setTab('veille');
-    } }, '⏎ Log');
-    qbText.addEventListener('keydown', e => {
-      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); qbBtn.click(); }
-    });
-    root.appendChild(panel('Saisie rapide — Journal',
-      el('div', { class: 'quickbar' },
-        qbCat, qbAuthor, qbText, qbBtn,
-        el('div', { class: 'qb-hint' }, 'L : focus rapide · Ctrl+Entrée : envoyer'))
+    // Dernier SITREP émis — vision partagée la plus récente
+    const lastSitrep = (state.sitreps || [])[0];
+    root.appendChild(panel(
+      lastSitrep ? `Dernier SITREP — N°${lastSitrep.num} · ${fmtDTG(lastSitrep.ts)}` : 'Dernier SITREP',
+      el('div', {},
+        el('p', { class: 'muted' }, 'Référence pour le Duty Manager : dernière vision partagée diffusée à VP + Heads. Pour produire un nouveau SITREP, ouvrir l\'onglet "SITREP CMA".'),
+        lastSitrep
+          ? el('div', {},
+              el('pre', { class: 'sitrep-preview', style: 'max-height:360px' }, lastSitrep.text),
+              el('div', { class: 'flex', style: 'margin-top:10px' },
+                el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('sitrep') }, '→ SITREP CMA Ships'),
+                el('button', { class: 'btn-ghost btn-sm', onclick: () => download(`SITREP_CMA_${lastSitrep.num}.txt`, lastSitrep.text) }, '⬇ Télécharger')))
+          : el('div', {},
+              el('div', { class: 'empty' }, 'Aucun SITREP n\'a encore été émis.'),
+              el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('sitrep') }, '→ Générer le premier SITREP'))
+      )
     ));
 
     root.appendChild(panel('Déclenchements récents',
@@ -2344,31 +2411,46 @@
   //   TRIGGERS — critères de déclenchement
   // ============================================================
   renderers.triggers = (root) => {
-    const cats = [...new Set(window.TRIGGERS.map(t => t.cat))];
     const modeColor = m => m === 'crise' ? 'red' : m === 'vigilance' ? 'orange' : 'green';
+    const deptLabel = d => (window.DEPARTMENTS.find(x => x.code === d) || {}).label || d;
+
+    // Groupement : département → axe → triggers
+    const depts = ['FM', 'CR', 'FU'];
+
     root.appendChild(panel('Critères de déclenchement',
       el('div', {},
-        el('p', { class: 'muted' }, 'Liste pré-définie des critères qui font basculer le mode opérationnel CMA Ships. "Déclarer" applique automatiquement le mode cible (sans rétrogradation) et crée un incident pré-rempli.'),
-        ...cats.map(c => el('div', { style: 'margin-bottom:14px' },
-          el('h4', { style: 'margin:8px 0;color:var(--accent-2)' }, c),
-          tableEl(['Critère', 'Description', 'Mode →', ''],
-            window.TRIGGERS.filter(t => t.cat === c).map(t => [
-              el('strong', {}, t.label),
-              el('span', { class: 'muted' }, t.desc),
-              badge((t.mode || 'nominal').toUpperCase(), modeColor(t.mode)),
-              el('button', { class: 'btn-primary btn-sm', onclick: () => declareTrigger(t) }, 'Déclarer')
-            ]))))
+        el('p', { class: 'muted' }, 'Groupés par département (Duty Officer concerné) puis par axe (Technique, Régulation, Équipage, Commercial, Soutage, Chantier, Livraison, Logistique, Certification). "Déclarer" ouvre une fenêtre pré-remplie avec un exemple guide, applique le mode cible (sans rétrogradation) et crée un dossier.'),
+        ...depts.map(dept => {
+          const dTriggers = window.TRIGGERS.filter(t => t.dept === dept);
+          if (dTriggers.length === 0) return null;
+          const axes = [...new Set(dTriggers.map(t => t.axe))];
+          return el('div', { style: 'margin-top:18px' },
+            el('h3', { style: 'margin:8px 0;color:var(--accent-2);font-size:14px' },
+              dept + ' — ' + deptLabel(dept), ' ',
+              el('span', { class: 'muted', style: 'font-weight:normal;font-size:12px' },
+                '· Duty Officer : ' + (state.dutyOfficers[dept] || '—'))),
+            ...axes.map(axe => el('div', { style: 'margin-top:10px' },
+              el('h4', { style: 'margin:6px 0 4px;font-size:12.5px;color:var(--text)' }, axe),
+              tableEl(['Critère', 'Description', 'Mode →', ''],
+                dTriggers.filter(t => t.axe === axe).map(t => [
+                  el('strong', {}, t.label),
+                  el('span', { class: 'muted' }, t.desc),
+                  badge((t.mode || 'nominal').toUpperCase(), modeColor(t.mode)),
+                  el('button', { class: 'btn-primary btn-sm', onclick: () => declareTrigger(t) }, 'Déclarer')
+                ])))));
+        })
       )
     ));
 
     if (state.triggerEvents && state.triggerEvents.length) {
-      root.appendChild(panel('Historique',
-        tableEl(['DTG', 'Catégorie', 'Trigger', 'Mode', 'Navire', 'Par'],
+      root.appendChild(panel('Historique des déclenchements',
+        tableEl(['DTG', 'Dépt · Axe', 'Trigger', 'Mode', 'Navire', 'Par'],
           state.triggerEvents.map(t => {
-            const m = t.mode || t.posture || 'nominal';
+            const m = t.mode || 'nominal';
+            const tag = (t.dept || '?') + ' · ' + (t.axe || t.cat || '');
             return [
               el('span', { class: 'mono' }, fmtDTG(t.ts)),
-              badge(t.cat, 'blue'), t.label,
+              badge(tag, 'blue'), t.label,
               badge(m, modeColor(m)),
               t.vessel || '—', t.author || '—'
             ];
@@ -2377,19 +2459,24 @@
   };
 
   function declareTrigger(trg) {
-    const vesselSel = el('input', { list: 'dl-vessels', placeholder: 'Navire concerné (optionnel)' });
-    const deptSel = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code }, d.code + ' — ' + d.label)));
-    const note = el('textarea', { placeholder: 'Précisions / contexte (optionnel)' });
+    const vesselSel = el('input', { list: 'dl-vessels', placeholder: 'Navire concerné' });
+    const deptSel = el('select', {}, ...window.DEPARTMENTS.map(d =>
+      el('option', { value: d.code, selected: d.code === trg.dept }, d.code + ' — ' + d.label)));
+    const note = el('textarea', { style: 'min-height:120px' }, trg.exampleNote || '');
+    const sitrepLine = el('input', { placeholder: 'Ex. CC AURORE — bunker off-spec Fujairah, suspension consommation, LOP fournisseur' });
+
     const submit = () => {
       const ev = {
         id: id(), ts: nowISO(),
-        triggerId: trg.id, label: trg.label, cat: trg.cat,
+        triggerId: trg.id, label: trg.label,
+        dept: deptSel.value, axe: trg.axe, cat: (trg.dept || '?') + ' — ' + (trg.axe || ''),
         mode: trg.mode,
         vessel: vesselSel.value, note: note.value,
         author: currentUserName() || 'MOC'
       };
       state.triggerEvents = state.triggerEvents || [];
       state.triggerEvents.unshift(ev);
+
       // Mode : escalade seulement (jamais de rétrogradation auto)
       const order = { nominal: 0, vigilance: 1, crise: 2 };
       if ((order[trg.mode] || 0) > (order[state.alert] || 0)) {
@@ -2397,37 +2484,60 @@
         applyAlertClass();
         $('#alertSelect').value = state.alert;
       }
-      const incRef = 'INC-' + Date.now().toString(36).toUpperCase();
+
+      // Création d'un dossier pré-rempli (lié au trigger)
+      const incRef = 'DOS-' + Date.now().toString(36).toUpperCase();
       state.incidents.push({
         id: id(), ref: incRef,
         type: trg.incidentType || 'Autre',
         vessel: vesselSel.value || '',
         department: deptSel.value,
         severity: trg.mode === 'crise' ? 'crit' : trg.mode === 'vigilance' ? 'high' : 'med',
-        ines: trg.mode === 'crise' ? 5 : trg.mode === 'vigilance' ? 4 : 2,
-        roe: null,
         status: 'open', startedAt: ev.ts,
-        summary: `[Trigger ${trg.label}] ${note.value || ''}`.trim()
+        summary: note.value,
+        sitrepLine: sitrepLine.value || (vesselSel.value ? vesselSel.value + ' — ' + trg.label : trg.label)
       });
       if (vesselSel.value) {
         const v = state.vessels.find(x => x.name === vesselSel.value);
         if (v) v.status = 'incident';
       }
-      logMEL('SECURITY', `Trigger déclaré : ${trg.label} → mode ${state.alert.toUpperCase()}, incident ${incRef}`);
+      logMEL('DOSSIER', `Trigger déclaré : ${trg.label} → mode ${state.alert.toUpperCase()}, dossier ${incRef}`);
       save(); closeModal();
-      if (confirm(`Trigger déclaré.\nMode : ${state.alert.toUpperCase()}\nIncident ${incRef} créé.\n\nOuvrir un modèle de notification maintenant ?`)) {
-        setTab('notif');
+
+      // Proposer les modèles d'alerte associés au trigger
+      const suggested = (trg.suggestedNotifs || []).map(nid =>
+        (window.NOTIF_TEMPLATES || []).find(n => n.id === nid)).filter(Boolean);
+      if (suggested.length) {
+        openModal('Modèles d\'alerte recommandés',
+          el('div', {},
+            el('p', { class: 'muted' }, 'Templates suggérés pour ce trigger. Cliquer pour remplir et copier.'),
+            el('div', { class: 'cards' },
+              ...suggested.map(tpl => el('div', { class: 'card' },
+                el('div', { class: 'flex-between' },
+                  el('div', { class: 'card-title' }, tpl.label),
+                  badge(tpl.channel, 'blue')),
+                el('div', { class: 'card-meta' }, 'Pour : ' + tpl.audience),
+                el('div', { class: 'card-actions' },
+                  el('button', { class: 'btn-primary btn-sm', onclick: () => fillNotif(tpl) }, 'Renseigner & copier'))))),
+            el('div', { class: 'flex', style: 'margin-top:10px' },
+              el('button', { class: 'btn-ghost', onclick: closeModal }, 'Plus tard'))));
       } else {
         setTab('veille');
       }
     };
-    openModal('Déclarer un trigger : ' + trg.label,
+
+    const modeColor = trg.mode === 'crise' ? 'red' : trg.mode === 'vigilance' ? 'orange' : 'green';
+    openModal('Déclarer : ' + trg.label,
       el('div', {},
         el('div', { class: 'auth-warn' },
-          'Cette action va passer le mode opérationnel en ', el('strong', {}, (trg.mode || 'vigilance').toUpperCase()),
-          ' (si supérieur au courant), créer un incident pré-rempli, et tracer l\'événement dans le journal.'),
+          el('div', {}, '⚡ ', el('strong', {}, trg.dept || 'XX'), ' · ', trg.axe || '', ' · ',
+            badge((trg.mode || 'nominal').toUpperCase(), modeColor)),
+          el('div', { style: 'font-size:11.5px;margin-top:4px' },
+            'Mode opérationnel passera en ', el('strong', {}, (trg.mode || 'vigilance').toUpperCase()),
+            ' (si supérieur au courant). Dossier auto-créé. Modèles d\'alerte recommandés proposés ensuite.')),
         twoCol('Navire concerné', vesselSel, 'Département', deptSel),
-        field('Note', note),
+        field('Note (l\'exemple ci-dessous est un guide — adaptez-le aux faits)', note),
+        field('Une ligne pour le SITREP du DO (auto-aggregée)', sitrepLine),
         el('div', { class: 'flex', style: 'margin-top:14px' },
           el('button', { class: 'btn-danger', onclick: submit }, '⚡ Confirmer le déclenchement'),
           el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
