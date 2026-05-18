@@ -252,7 +252,7 @@ window.MODES = [
 window.SITREP_CMA_TEMPLATE = `╔══════════════════════════════════════════════════════════════╗
 ║                    CMA SHIPS — SITREP                        ║
 ╚══════════════════════════════════════════════════════════════╝
-{DAY}   ·   Semaine {WEEK}   ·   {CONTEXT}
+{DAY}   ·   Semaine {WEEK}
 Duty Manager Marseille : {DM_NAME}
 Mode : {MODE}
 
