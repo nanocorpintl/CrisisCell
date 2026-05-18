@@ -1673,24 +1673,31 @@
         .map(([k, l]) => el('option', { value: k, selected: d.status === k }, l)));
       const doName = el('input', { value: state.dutyOfficers[dept] || currentUserName(), placeholder: 'Nom DO ' + dept });
 
-      // Dossiers du jour : auto-aggregation depuis l'onglet Dossiers
-      // (synthèse une-ligne `sitrepLine` de chaque dossier ouvert du dépt)
+      // Dossiers du jour : auto depuis l'onglet Dossiers, triés par sévérité.
+      const sevOrderDo = { crit: 0, high: 1, med: 2, low: 3 };
       const openDossiers = state.incidents
-        .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept);
+        .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept)
+        .slice()
+        .sort((a, b) => (sevOrderDo[a.severity] ?? 9) - (sevOrderDo[b.severity] ?? 9));
 
       const dossiersPreview = el('div', {},
         openDossiers.length === 0
           ? el('div', { class: 'empty', style: 'padding:14px' }, 'Aucun dossier ouvert pour ' + dept + '. Ajouter un dossier dans l\'onglet "Dossiers" pour qu\'il apparaisse ici.')
-          : el('div', {}, ...openDossiers.map(i => el('div', {
-              class: 'pb-step',
-              style: 'cursor:pointer',
-              onclick: () => incidentForm(i.id)
-            },
-              badge(i.severity || 'med', severityColor(i.severity)),
-              el('div', { class: 'pb-text', style: 'flex:1' },
-                el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref + ' · '),
-                i.sitrepLine || (i.vessel || 'n/a') + ' — ' + i.type)
-            )))
+          : el('div', {}, ...openDossiers.map(i => {
+              const v = (i.vessel || 'n/a').toUpperCase();
+              const raw = (i.sitrepLine || i.type || '').trim();
+              const line = raw.toUpperCase().startsWith(v) ? raw : (raw ? v + ' — ' + raw : v);
+              return el('div', {
+                class: 'pb-step',
+                style: 'cursor:pointer',
+                onclick: () => incidentForm(i.id)
+              },
+                badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+                el('div', { class: 'pb-text', style: 'flex:1' },
+                  el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref + ' · '),
+                  line)
+              );
+            }))
       );
 
       // Échéances 24-72 h : auto depuis Actions du dept
@@ -1873,11 +1880,21 @@
     const modeLbl = { nominal: 'Nominal', vigilance: 'Vigilance', crise: 'Crise' }[state.alert] || 'Nominal';
     const deptLetter = { green: 'V', amber: 'A', red: 'R' };
 
-    // Dossiers du jour = synthèse une ligne (sitrepLine) de chaque dossier
-    // ouvert du département. Fallback : vessel — type — résumé tronqué.
+    // Dossiers du jour = synthèse une ligne de chaque dossier ouvert du dépt.
+    // Toujours préfixée du nom du navire, triée par sévérité décroissante.
+    const sevOrder = { crit: 0, high: 1, med: 2, low: 3 };
+    const sevLabel = { crit: 'CRIT', high: 'HIGH', med: 'MED', low: 'LOW' };
     const dossiersFor = (dept) => state.incidents
       .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept)
-      .map(i => i.sitrepLine || `${i.vessel || 'n/a'} — ${i.type}` + (i.summary ? ' : ' + i.summary.replace(/\n/g, ' ').slice(0, 120) : ''));
+      .slice()
+      .sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9))
+      .map(i => {
+        const v = (i.vessel || 'n/a').toUpperCase();
+        const raw = (i.sitrepLine || `${i.type}${i.summary ? ' : ' + i.summary.replace(/\n/g, ' ').slice(0, 120) : ''}`).trim();
+        // Évite de dupliquer le nom du navire s'il est déjà au début
+        const line = raw.toUpperCase().startsWith(v) ? raw : `${v} — ${raw}`;
+        return `[${sevLabel[i.severity] || '—'}] ${line}`;
+      });
 
     // Échéances 24-72h = actions du dept dont due dans 24-72h
     const now = Date.now();
