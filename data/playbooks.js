@@ -262,9 +262,6 @@ Mode : {MODE}
 {SYNTHESIS}
 
 ▸ KPIs
-  • Navires en escale       : {VESSELS_PORT}
-  • Navires en passage      : {VESSELS_TRANSIT}
-  • Frictions actives       : {FRICTIONS_COUNT}
   • Alertes 24 h            : {ALERTS_24H}
   • Off-hire estimé (h)     : {OFFHIRE_HOURS}
        — FM : {OFFHIRE_FM} h · CR : {OFFHIRE_CR} h · FU : {OFFHIRE_FU} h
