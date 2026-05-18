@@ -1887,8 +1887,6 @@
     const dm = el('input', { value: state.dutyManager || currentUserName(), placeholder: 'Nom du DM Marseille' });
     const mode = el('select', {}, ...window.MODES.map(m => el('option', { value: m.code, selected: state.alert === m.code }, m.label)));
     const synthesis = el('textarea', { placeholder: 'Synthèse opérationnelle des dernières 24 h — 30 à 40 mots.' });
-    const vPort = el('input', { type: 'number', value: state.vesselsPort || 0 });
-    const vTransit = el('input', { type: 'number', value: state.vesselsTransit || 0 });
     const doFM = el('input', { value: state.dutyOfficers.FM || '', placeholder: 'Nom DO FM (SG)' });
     const doCR = el('input', { value: state.dutyOfficers.CR || '', placeholder: 'Nom DO CR (SG)' });
     const doFU = el('input', { value: state.dutyOfficers.FU || '', placeholder: 'Nom DO FU (Chine)' });
@@ -1904,8 +1902,6 @@
       state.weekNumber = week.value;
       state.dutyManager = dm.value;
       state.alert = mode.value; applyAlertClass(); $('#alertSelect').value = state.alert;
-      state.vesselsPort = parseInt(vPort.value, 10) || 0;
-      state.vesselsTransit = parseInt(vTransit.value, 10) || 0;
       state.dutyOfficers = { FM: doFM.value, CR: doCR.value, FU: doFU.value };
       state.deptStatus = { FM: sFM.value, CR: sCR.value, FU: sFU.value };
       const text = renderCMASitrep(synthesis.value);
@@ -1922,7 +1918,6 @@
         el('p', { class: 'muted' }, 'SITREP du Duty Manager — diffusion VP + Heads à 08h30 Marseille. Consolide les 3 SITREPs départementaux saisis par les Duty Officers dans l\'onglet "Mon SITREP". À défaut de saisie DO, les blocs sont remplis par agrégation automatique depuis Dossiers, Actions et Frictions taggés par département.'),
         twoCol('Contexte', ctx, 'Semaine', week),
         twoCol('Duty Manager Marseille', dm, 'Mode', mode),
-        twoCol('Navires en escale', vPort, 'Navires en passage', vTransit),
         field('Synthèse 24 h (30-40 mots)', synthesis),
         el('h4', { style: 'margin:14px 0 6px' }, 'Statuts départementaux & Duty Officers'),
         twoCol('FM — Duty Officer', doFM, 'FM — Statut', sFM),
@@ -2022,9 +2017,6 @@
       .replace('{MODE}', modeLbl)
       .replace('{STATUT}', statutLbl)
       .replace('{SYNTHESIS}', synthesis || '—')
-      .replace('{VESSELS_PORT}', state.vesselsPort || 0)
-      .replace('{VESSELS_TRANSIT}', state.vesselsTransit || 0)
-      .replace('{FRICTIONS_COUNT}', frActives)
       .replace('{ALERTS_24H}', alerts24)
       .replace('{OFFHIRE_HOURS}', state.incidents
         .filter(i => i.status !== 'closed')
