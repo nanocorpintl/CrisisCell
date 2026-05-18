@@ -177,6 +177,11 @@
       if (!state.deptSitreps[c]) state.deptSitreps[c] = { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' };
     });
     if (!state.lastDoDept) state.lastDoDept = 'FM';
+    // Off-hire : initialiser les champs sur les dossiers existants
+    (state.incidents || []).forEach(i => {
+      if (i.offhireEstimated == null) i.offhireEstimated = 0;
+      if (i.offhireActual == null) i.offhireActual = null;
+    });
   }
 
   // ============================================================
@@ -699,6 +704,15 @@
         state.opsPeriod ? el('span', {}, '— OPS Period : ', el('strong', {}, state.opsPeriod)) : null)
     ));
 
+    // Off-hire — somme des risques sur les dossiers ouverts + total réel sur les dossiers clos
+    const offhireSum = (filterFn, key) => state.incidents
+      .filter(filterFn)
+      .reduce((acc, i) => acc + (parseFloat(i[key]) || 0), 0);
+    const offhireOpen = offhireSum(i => i.status !== 'closed', 'offhireEstimated');
+    const offhireClosed = offhireSum(i => i.status === 'closed', 'offhireActual');
+    const offhireByDept = (dept) => offhireSum(
+      i => i.status !== 'closed' && (i.department || 'XX') === dept, 'offhireEstimated');
+
     const kpis = el('div', { class: 'grid-4' },
       kpiTile('Mode', mode.statut,
         mode.code === 'crise' ? 'danger' : mode.code === 'vigilance' ? 'warn' : 'ok',
@@ -708,6 +722,25 @@
       kpiTile('Actions en retard', overdue, overdue ? 'danger' : (openActions ? 'warn' : 'ok'), `${openActions} ouvertes`)
     );
     root.appendChild(kpis);
+
+    // Off-hire — panel dédié (estimé en cours + réel cumulé clôturé)
+    const offhireKpis = el('div', { class: 'grid-2' },
+      kpiTile('Off-hire estimé (en cours)',
+        offhireOpen.toString() + ' h',
+        offhireOpen > 240 ? 'danger' : offhireOpen > 72 ? 'warn' : 'ok',
+        `FM ${offhireByDept('FM')} · CR ${offhireByDept('CR')} · FU ${offhireByDept('FU')}`),
+      kpiTile('Off-hire réel cumulé (clos)',
+        offhireClosed.toString() + ' h',
+        'muted',
+        `${state.incidents.filter(i => i.status === 'closed').length} dossier(s) clos avec chiffrage`)
+    );
+    root.appendChild(panel('Off-hire',
+      el('div', {},
+        el('p', { class: 'muted', style: 'margin-bottom:10px' },
+          'Risque opérationnel : somme des heures de off-hire estimées sur les dossiers ouverts (FM/CR/FU). Le chiffrage exact est obligatoire à la clôture de chaque dossier.'),
+        offhireKpis
+      )
+    ));
 
     // Quickbar — saisie MEL ultra-rapide
     const qbCat = el('select', {}, ...['INFO','INC','DECISION','COMMS','ACTION','SAFETY','SECURITY','MEDIA','VESSEL','OTHER']
@@ -773,20 +806,30 @@
         state.incidents.length === 0
           ? el('div', { class: 'empty' }, 'Aucun dossier ouvert.')
           : tableEl(
-            ['Réf', 'Dépt', 'Type', 'Navire', 'Sévérité', 'Démarré', 'Statut', ''],
-            state.incidents.map(i => [
-              el('span', { class: 'mono' }, i.ref || ''),
-              badge(i.department || 'XX', 'blue'),
-              i.type || '',
-              i.vessel || '',
-              badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
-              fmtTime(i.startedAt),
-              badge(i.status, i.status === 'open' ? 'red' : i.status === 'monitoring' ? 'orange' : 'green'),
-              el('div', { class: 'flex' },
-                el('button', { class: 'btn-ghost btn-sm', onclick: () => incidentForm(i.id) }, 'Éditer'),
-                el('button', { class: 'btn-danger btn-sm', onclick: () => deleteIncident(i.id) }, '✕')
-              )
-            ])
+            ['Réf', 'Dépt', 'Type', 'Navire', 'Sévérité', 'Off-hire (h)', 'Démarré', 'Statut', ''],
+            state.incidents.map(i => {
+              const isClosed = i.status === 'closed';
+              const value = isClosed
+                ? (i.offhireActual != null ? i.offhireActual + ' h' : '⚠ non chiffré')
+                : ((i.offhireEstimated || 0) + ' h est.');
+              const color = isClosed
+                ? (i.offhireActual == null ? 'red' : 'grey')
+                : ((i.offhireEstimated || 0) > 72 ? 'orange' : 'blue');
+              return [
+                el('span', { class: 'mono' }, i.ref || ''),
+                badge(i.department || 'XX', 'blue'),
+                i.type || '',
+                i.vessel || '',
+                badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+                badge(value, color),
+                fmtTime(i.startedAt),
+                badge(i.status, i.status === 'open' ? 'red' : i.status === 'monitoring' ? 'orange' : 'green'),
+                el('div', { class: 'flex' },
+                  el('button', { class: 'btn-ghost btn-sm', onclick: () => incidentForm(i.id) }, 'Éditer'),
+                  el('button', { class: 'btn-danger btn-sm', onclick: () => deleteIncident(i.id) }, '✕')
+                )
+              ];
+            })
           )
       )
     ));
@@ -811,8 +854,36 @@
       placeholder: 'Synthèse en UNE LIGNE qui apparaîtra dans le SITREP du DO',
       value: inc.sitrepLine || ''
     });
+    const offhireEst = el('input', {
+      type: 'number', min: 0, step: 0.5,
+      value: inc.offhireEstimated != null ? inc.offhireEstimated : 0,
+      placeholder: 'Heures estimées'
+    });
+    const offhireAct = el('input', {
+      type: 'number', min: 0, step: 0.5,
+      value: inc.offhireActual != null ? inc.offhireActual : '',
+      placeholder: 'OBLIGATOIRE à la clôture — chiffrage exact'
+    });
+    // Highlight le champ "réel" si statut = closed
+    const refreshOffhireRequired = () => {
+      const required = status.value === 'closed';
+      offhireAct.style.borderColor = required && (offhireAct.value === '' || offhireAct.value == null) ? 'var(--danger)' : '';
+      offhireAct.required = required;
+    };
+    status.addEventListener('change', refreshOffhireRequired);
+    refreshOffhireRequired();
 
     const submit = () => {
+      // Validation : off-hire réel obligatoire à la clôture
+      if (status.value === 'closed') {
+        const v = parseFloat(offhireAct.value);
+        if (offhireAct.value === '' || isNaN(v) || v < 0) {
+          offhireAct.style.borderColor = 'var(--danger)';
+          offhireAct.focus();
+          toast('À la clôture, le chiffrage EXACT du off-hire (en heures) est obligatoire.', 'danger');
+          return;
+        }
+      }
       const data = {
         id: inc.id || id(),
         ref: ref.value, type: type.value, vessel: vessel.value,
@@ -821,14 +892,20 @@
         status: status.value,
         startedAt: new Date(startedAt.value).toISOString(),
         summary: summary.value,
-        sitrepLine: sitrepLine.value || `${vessel.value || 'n/a'} — ${type.value}` + (summary.value ? ' : ' + summary.value.split('\n')[0].slice(0, 120) : '')
+        sitrepLine: sitrepLine.value || `${vessel.value || 'n/a'} — ${type.value}` + (summary.value ? ' : ' + summary.value.split('\n')[0].slice(0, 120) : ''),
+        offhireEstimated: parseFloat(offhireEst.value) || 0,
+        offhireActual: offhireAct.value === '' ? null : parseFloat(offhireAct.value)
       };
+      if (data.status === 'closed' && !data.closedAt) data.closedAt = nowISO();
       if (idEdit) {
         state.incidents[state.incidents.findIndex(i => i.id === idEdit)] = data;
-        logMEL('DOSSIER', `Dossier ${data.ref} mis à jour (${data.status})`);
+        const offMsg = data.status === 'closed'
+          ? ` · off-hire RÉEL : ${data.offhireActual} h`
+          : ` · off-hire estimé : ${data.offhireEstimated} h`;
+        logMEL('DOSSIER', `Dossier ${data.ref} mis à jour (${data.status})${offMsg}`);
       } else {
         state.incidents.push(data);
-        logMEL('DOSSIER', `Nouveau dossier [${data.department}] ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity})`);
+        logMEL('DOSSIER', `Nouveau dossier [${data.department}] ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity}, off-hire estimé ${data.offhireEstimated} h)`);
         if (data.severity === 'crit') state.alert = 'crise';
         else if (data.severity === 'high' && state.alert === 'nominal') state.alert = 'vigilance';
         if (data.vessel) {
@@ -848,6 +925,10 @@
       field('Date début', startedAt),
       field('Synthèse une ligne (apparaît dans le SITREP du DO)', sitrepLine),
       field('Description détaillée', summary),
+      el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Off-hire'),
+      twoCol('Off-hire estimé (heures)', offhireEst, 'Off-hire réel (clôture — OBLIGATOIRE)', offhireAct),
+      el('div', { class: 'muted', style: 'font-size:11.5px' },
+        '⚠ À la clôture du dossier, le chiffrage EXACT du nombre d\'heures de off-hire est obligatoire. Ces heures sont sommées dans le SITREP CMA Ships et suivies dans l\'onglet COP.'),
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Mettre à jour' : 'Créer'),
         el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
@@ -1945,6 +2026,18 @@
       .replace('{VESSELS_TRANSIT}', state.vesselsTransit || 0)
       .replace('{FRICTIONS_COUNT}', frActives)
       .replace('{ALERTS_24H}', alerts24)
+      .replace('{OFFHIRE_HOURS}', state.incidents
+        .filter(i => i.status !== 'closed')
+        .reduce((a, i) => a + (parseFloat(i.offhireEstimated) || 0), 0))
+      .replace('{OFFHIRE_FM}', state.incidents
+        .filter(i => i.status !== 'closed' && (i.department || 'XX') === 'FM')
+        .reduce((a, i) => a + (parseFloat(i.offhireEstimated) || 0), 0))
+      .replace('{OFFHIRE_CR}', state.incidents
+        .filter(i => i.status !== 'closed' && (i.department || 'XX') === 'CR')
+        .reduce((a, i) => a + (parseFloat(i.offhireEstimated) || 0), 0))
+      .replace('{OFFHIRE_FU}', state.incidents
+        .filter(i => i.status !== 'closed' && (i.department || 'XX') === 'FU')
+        .reduce((a, i) => a + (parseFloat(i.offhireEstimated) || 0), 0))
       .replace('{TOP_MGMT_POINTS}', topMgmt.length === 0
         ? '  — Aucun point remonté au VP —'
         : topMgmt.map((p, idx) => `  ${idx + 1}. ${p.label}`).join('\n'))
