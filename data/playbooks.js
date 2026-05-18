@@ -262,9 +262,13 @@ Mode : {MODE}
 {SYNTHESIS}
 
 ▸ KPIs
-  • Alertes 24 h            : {ALERTS_24H}
-  • Off-hire estimé (h)     : {OFFHIRE_HOURS}
+  • Alertes 24 h                            : {ALERTS_24H}
+  • Off-hire estimé en cours (h)            : {OFFHIRE_HOURS}
        — FM : {OFFHIRE_FM} h · CR : {OFFHIRE_CR} h · FU : {OFFHIRE_FU} h
+  • Risque off-hire de la semaine (nouveau) : {OFFHIRE_WEEK} h
+  • Off-hire YTD réalisé                    : {OFFHIRE_YTD} h
+  • Objectif YTD (99,5% × {N_VESSELS} navires)            : {OFFHIRE_TARGET} h
+  • YTD vs objectif                         : {OFFHIRE_RATIO} %
 
 ◆ POINTS POUR TOP MANAGEMENT
   À l'attention directe du VP avant Group MM

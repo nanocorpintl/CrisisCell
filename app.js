@@ -723,21 +723,31 @@
     );
     root.appendChild(kpis);
 
-    // Off-hire — panel dédié (estimé en cours + réel cumulé clôturé)
-    const offhireKpis = el('div', { class: 'grid-2' },
-      kpiTile('Off-hire estimé (en cours)',
+    // Off-hire — panel dédié : 4 KPIs (En cours · Semaine · YTD · vs Objectif)
+    const offM = computeOffhireMetrics();
+    const ratioTone = offM.ratio >= 100 ? 'danger' : offM.ratio >= 75 ? 'warn' : 'ok';
+    const offhireKpis = el('div', { class: 'grid-4' },
+      kpiTile('Estimé (en cours)',
         offhireOpen.toString() + ' h',
         offhireOpen > 240 ? 'danger' : offhireOpen > 72 ? 'warn' : 'ok',
         `FM ${offhireByDept('FM')} · CR ${offhireByDept('CR')} · FU ${offhireByDept('FU')}`),
-      kpiTile('Off-hire réel cumulé (clos)',
-        offhireClosed.toString() + ' h',
+      kpiTile('Risque semaine (nouveau)',
+        offM.weekNew.toString() + ' h',
+        offM.weekNew > 48 ? 'warn' : 'ok',
+        'dossiers ouverts depuis lundi'),
+      kpiTile('YTD réalisé',
+        offM.ytdActual.toString() + ' h',
         'muted',
-        `${state.incidents.filter(i => i.status === 'closed').length} dossier(s) clos avec chiffrage`)
+        `${offM.daysElapsed} j depuis 1ᵉʳ janvier`),
+      kpiTile('YTD vs objectif',
+        offM.ratio + ' %',
+        ratioTone,
+        `cible ${offM.ytdTarget} h (99,5% × ${offM.nVessels} nav.)`)
     );
     root.appendChild(panel('Off-hire',
       el('div', {},
         el('p', { class: 'muted', style: 'margin-bottom:10px' },
-          'Risque opérationnel : somme des heures de off-hire estimées sur les dossiers ouverts (FM/CR/FU). Le chiffrage exact est obligatoire à la clôture de chaque dossier.'),
+          'Cible disponibilité : 99,5% sur 365 j (≈ 43,8 h off-hire/navire/an). Objectif YTD = ' + offM.ytdTarget + ' h pour ' + offM.nVessels + ' navire(s).'),
         offhireKpis
       )
     ));
@@ -1976,6 +1986,36 @@
     }
   };
 
+  // Métriques off-hire YTD / semaine / objectif.
+  // Cible disponibilité : 99,5% sur 365 j ⇒ tolérance 43,8 h/navire/an.
+  function computeOffhireMetrics() {
+    const now = new Date();
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+    const daysElapsed = Math.max(1, Math.ceil((now - yearStart) / (24 * 3600 * 1000)));
+    const dayOfWeek = now.getDay() || 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek + 1);
+    monday.setHours(0, 0, 0, 0);
+    const nVessels = (state.vessels || []).length || 1;
+
+    const ytdActual = (state.incidents || [])
+      .filter(i => i.status === 'closed' && i.closedAt && new Date(i.closedAt) >= yearStart)
+      .reduce((acc, i) => acc + (parseFloat(i.offhireActual) || 0), 0);
+
+    const weekNew = (state.incidents || [])
+      .filter(i => i.startedAt && new Date(i.startedAt) >= monday)
+      .reduce((acc, i) => acc + (parseFloat(i.offhireEstimated) || 0), 0);
+
+    const tolerancePerVesselYear = 365 * 24 * 0.005; // 43,8 h/navire/an
+    const ytdTarget = Math.round((daysElapsed / 365) * tolerancePerVesselYear * nVessels);
+    const ratio = ytdTarget > 0 ? Math.round((ytdActual / ytdTarget) * 100) : 0;
+    return {
+      ytdActual: Math.round(ytdActual * 10) / 10,
+      weekNew:   Math.round(weekNew * 10) / 10,
+      ytdTarget, ratio, nVessels, daysElapsed
+    };
+  }
+
   function isoWeekNumber(d) {
     const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNum = date.getUTCDay() || 7;
@@ -1986,6 +2026,7 @@
 
   function renderCMASitrep(synthesis) {
     const fmt = (arr) => arr.length === 0 ? '  ▸ Néant.' : arr.map(s => '  ▸ ' + s).join('\n');
+    const offhireM = computeOffhireMetrics();
     const today = new Date();
     const dayStr = today.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const statutLbl = { nominal: 'VERT', vigilance: 'AMBRE', crise: 'ROUGE' }[state.alert] || 'VERT';
@@ -2065,6 +2106,11 @@
       .replace('{OFFHIRE_FU}', state.incidents
         .filter(i => i.status !== 'closed' && (i.department || 'XX') === 'FU')
         .reduce((a, i) => a + (parseFloat(i.offhireEstimated) || 0), 0))
+      .replace('{OFFHIRE_WEEK}',   offhireM.weekNew)
+      .replace('{OFFHIRE_YTD}',    offhireM.ytdActual)
+      .replace('{OFFHIRE_TARGET}', offhireM.ytdTarget)
+      .replace('{OFFHIRE_RATIO}',  offhireM.ratio)
+      .replace('{N_VESSELS}',      offhireM.nVessels)
       .replace('{TOP_MGMT_POINTS}', topMgmt.length === 0
         ? '  — Aucun point remonté au VP —'
         : topMgmt.map((p, idx) => `  ${idx + 1}. ${p.label}`).join('\n'))
