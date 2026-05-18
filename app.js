@@ -132,7 +132,15 @@
       // Nouveaux modules CMA Ships
       frictions: [],
       weakSignals: [],
-      topMgmtPoints: []
+      topMgmtPoints: [],
+      // SITREPs départementaux rédigés par les Duty Officers — alimentent
+      // automatiquement les 3 blocs département du SITREP CMA Ships consolidé.
+      deptSitreps: {
+        FM: { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' },
+        CR: { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' },
+        FU: { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' }
+      },
+      lastDoDept: 'FM'
     };
   }
 
@@ -158,6 +166,17 @@
     if (!state.sitrepContext) state.sitrepContext = '';
     // Drop ancien `posture` (T0/T1/T2) — remplacé par `alert` mode-based
     if (state.posture) delete state.posture;
+    if (!state.deptSitreps) {
+      state.deptSitreps = {
+        FM: { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' },
+        CR: { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' },
+        FU: { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' }
+      };
+    }
+    ['FM','CR','FU'].forEach(c => {
+      if (!state.deptSitreps[c]) state.deptSitreps[c] = { status: 'green', dossiers: '', deadlines: '', frictions: '', updatedAt: '', updatedBy: '' };
+    });
+    if (!state.lastDoDept) state.lastDoDept = 'FM';
   }
 
   // ============================================================
@@ -556,7 +575,7 @@
         p: 'passation', s: 'sitrep', l: 'playbooks',
         x: 'retex', z: 'exercises',
         w: 'veille', q: 'triggers', f: 'notif',
-        y: 'frictions'
+        y: 'frictions', o: 'dosit'
       };
       const target = map[e.key.toLowerCase()];
       if (target) { setTab(target); e.preventDefault(); }
@@ -674,9 +693,11 @@
     const frActives = (state.frictions || []).filter(f => f.status !== 'closed').length;
     const mode = window.MODES.find(m => m.code === state.alert) || window.MODES[0];
 
-    if (state.opsPeriod) {
-      root.appendChild(el('div', { class: 'muted', style: 'font-size:12px' }, 'OPS Period · ' + state.opsPeriod));
-    }
+    root.appendChild(panel('Backlog Duty Manager',
+      el('div', { class: 'muted' },
+        'Vue d\'ensemble du Duty Manager : tout ce qui tourne en parallèle (dossiers, frictions, actions, notes du Duty Log). Mise à jour au fil de l\'eau. ',
+        state.opsPeriod ? el('span', {}, '— OPS Period : ', el('strong', {}, state.opsPeriod)) : null)
+    ));
 
     const kpis = el('div', { class: 'grid-4' },
       kpiTile('Mode', mode.statut,
@@ -744,8 +765,9 @@
   renderers.incidents = (root) => {
     root.appendChild(panel('Dossiers techniques & équipages',
       el('div', {},
+        el('p', { class: 'muted' }, 'Suivi des dossiers ouverts — propriétaire : le Duty Officer de chaque département (FM, CR, FU) pour son scope ; le Duty Manager pour les sujets transverses. Hors périmètre SSE (couvert par l\'outil dédié).'),
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, `${state.incidents.length} total — ${state.incidents.filter(i => i.status !== 'closed').length} ouvert(s) · Hors SSE (couvert par outil dédié)`),
+          el('div', { class: 'muted' }, `${state.incidents.length} total — ${state.incidents.filter(i => i.status !== 'closed').length} ouvert(s)`),
           el('button', { class: 'btn-primary', onclick: () => incidentForm() }, '+ Nouveau dossier (i)')
         ),
         state.incidents.length === 0
@@ -839,25 +861,42 @@
   //   VESSELS
   // ============================================================
   renderers.vessels = (root) => {
-    root.appendChild(panel('Flotte',
+    // Pour chaque navire, agréger les dossiers/actions/frictions associés
+    const dossiersByVessel = {};
+    state.incidents.filter(i => i.status !== 'closed').forEach(i => {
+      if (!i.vessel) return;
+      (dossiersByVessel[i.vessel] = dossiersByVessel[i.vessel] || []).push(i);
+    });
+    root.appendChild(panel('Flotte — vision par navire / classe',
       el('div', {},
+        el('p', { class: 'muted' }, 'Liste de la flotte CMA Ships. Vue navire-centrique : pour chaque coque, statut et dossiers ouverts associés (FM/CR/FU).'),
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
           el('div', { class: 'muted' }, `${state.vessels.length} navire(s)`),
           el('button', { class: 'btn-primary', onclick: () => vesselForm() }, '+ Ajouter (n)')
         ),
         state.vessels.length === 0
           ? el('div', { class: 'empty' }, 'Aucun navire.')
-          : tableEl(['Navire', 'IMO', 'Type', 'Statut', 'Position', 'Notes', ''],
-            state.vessels.map(v => [
-              el('span', { class: 'mono' }, v.name),
-              v.imo || '—', v.type || '',
-              vesselStatusBadge(v.status),
-              v.position || '—', v.notes || '',
-              el('div', { class: 'flex' },
-                el('button', { class: 'btn-ghost btn-sm', onclick: () => vesselForm(v.id) }, 'Éditer'),
-                el('button', { class: 'btn-danger btn-sm', onclick: () => deleteVessel(v.id) }, '✕')
-              )
-            ]))
+          : tableEl(['Navire', 'IMO', 'Type', 'Statut', 'Position', 'Dossiers ouverts', ''],
+            state.vessels.map(v => {
+              const ds = dossiersByVessel[v.name] || [];
+              return [
+                el('span', { class: 'mono' }, v.name),
+                v.imo || '—', v.type || '',
+                vesselStatusBadge(v.status),
+                v.position || '—',
+                ds.length === 0
+                  ? el('span', { class: 'muted' }, '—')
+                  : el('div', {}, ...ds.map(i =>
+                      el('div', { style: 'font-size:12px' },
+                        badge(i.department || 'XX', 'blue'), ' ',
+                        el('span', { class: 'mono', style: 'color:var(--muted)' }, i.ref), ' ',
+                        i.type))),
+                el('div', { class: 'flex' },
+                  el('button', { class: 'btn-ghost btn-sm', onclick: () => vesselForm(v.id) }, 'Éditer'),
+                  el('button', { class: 'btn-danger btn-sm', onclick: () => deleteVessel(v.id) }, '✕')
+                )
+              ];
+            }))
       )
     ));
   };
@@ -894,10 +933,10 @@
   //   MEL
   // ============================================================
   renderers.mel = (root) => {
-    const cat = el('select', {}, ...['INFO','INC','DECISION','COMMS','ACTION','SAFETY','SECURITY','MEDIA','VESSEL','OTHER']
+    const cat = el('select', {}, ...['INFO','DOSSIER','DECISION','COMMS','ACTION','VESSEL','DOSIT','OTHER']
       .map(c => el('option', { value: c }, c)));
     const author = el('input', { value: currentUserName(), list: 'dl-authors' });
-    const text = el('textarea', { placeholder: 'Événement (Ctrl+Entrée pour envoyer)' });
+    const text = el('textarea', { placeholder: 'Note (Ctrl+Entrée pour envoyer)' });
     const submit = () => {
       if (!text.value.trim()) return;
       logMEL(cat.value, text.value.trim(), author.value || currentUserName() || 'Anonyme');
@@ -905,16 +944,17 @@
       setTab('mel');
     };
     text.addEventListener('keydown', e => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); submit(); } });
-    root.appendChild(panel('Saisir un événement',
+    root.appendChild(panel('Duty Log',
       el('div', {},
+        el('p', { class: 'muted' }, 'Journal chronologique du Duty Manager (cf. JD Duty Manager : "Maintain the Duty Log in real time"). Notes au fil de l\'eau, traçabilité pour audit et passation. Distinct des Dossiers (suivi long) et des Actions (à faire).'),
         twoCol('Catégorie', cat, 'Auteur', author),
-        field('Événement', text),
+        field('Note', text),
         el('button', { class: 'btn-primary', onclick: submit }, '+ Consigner')
       )
     ));
-    root.appendChild(panel('Journal MEL',
+    root.appendChild(panel('Entrées',
       state.mel.length === 0
-        ? el('div', { class: 'empty' }, 'Vide.')
+        ? el('div', { class: 'empty' }, 'Aucune entrée pour le moment.')
         : el('div', {}, ...state.mel.map(meEntry)),
       el('button', { class: 'btn-ghost btn-sm', onclick: exportMEL }, '⬇ Export texte')
     ));
@@ -996,23 +1036,25 @@
   renderers.actions = (root) => {
     const open = state.actions.filter(a => a.status !== 'done');
     const done = state.actions.filter(a => a.status === 'done');
-    root.appendChild(panel('Actions',
+    root.appendChild(panel('Suivi des actions',
       el('div', {},
+        el('p', { class: 'muted' }, 'Actions à mener issues du Daily Stand-up, du WOR ou des Dossiers. Suivi opérationnel par département (DO) ou transverse (DM). Distinct des Dossiers (suivi long terme) et du Duty Log (notes chronologiques).'),
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
           el('div', { class: 'muted' }, `${open.length} ouverte(s) — ${done.length} clôturée(s)`),
           el('button', { class: 'btn-primary', onclick: () => actionForm() }, '+ Action (a)')
         ),
         open.length === 0 ? el('div', { class: 'empty' }, 'Aucune action.')
-          : tableEl(['Pri.', 'Description', 'Owner', 'Échéance', 'Statut', ''], open.map(actionRow))
+          : tableEl(['Pri.', 'Dépt', 'Description', 'Owner', 'Échéance', 'Statut', ''], open.map(actionRow))
       )
     ));
     if (done.length) root.appendChild(panel('Clôturées',
-      tableEl(['Pri.', 'Description', 'Owner', 'Échéance', 'Statut', ''], done.map(actionRow))));
+      tableEl(['Pri.', 'Dépt', 'Description', 'Owner', 'Échéance', 'Statut', ''], done.map(actionRow))));
   };
   function actionRow(a) {
     const overdue = a.due && new Date(a.due) < new Date() && a.status !== 'done';
     return [
       badge(a.priority || 'P3', a.priority === 'P1' ? 'red' : a.priority === 'P2' ? 'orange' : 'blue'),
+      badge(a.department || 'XX', 'blue'),
       a.text, a.owner || '—',
       el('span', { class: overdue ? 'badge red' : '' }, fmtTime(a.due)),
       el('span', { class: 'editable', onclick: () => cycleActionStatus(a.id) }, badge(a.status, a.status === 'done' ? 'green' : a.status === 'in-progress' ? 'orange' : 'blue')),
@@ -1073,11 +1115,12 @@
   //   DECISIONS
   // ============================================================
   renderers.decisions = (root) => {
-    root.appendChild(panel('Journal des décisions',
+    root.appendChild(panel('Arbitrages',
       el('div', {},
+        el('p', { class: 'muted' }, 'Arbitrages routine (Duty Officer intra-département, Duty Manager transverse) — cf. JDs CMA Ships : "Take routine technical arbitrations within the operational perimeter". Traçabilité légère : contexte / décision / mise en œuvre. Sujets dépassant le périmètre routine → escalade au Head ou VP.'),
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Tracer chaque décision avec son contexte, son contenu et sa mise en œuvre.'),
-          el('button', { class: 'btn-primary', onclick: () => decisionForm() }, '+ Décision (d)')
+          el('div', { class: 'muted' }, `${state.decisions.length} arbitrage(s) consigné(s)`),
+          el('button', { class: 'btn-primary', onclick: () => decisionForm() }, '+ Arbitrage (d)')
         ),
         state.decisions.length === 0 ? el('div', { class: 'empty' }, 'Aucune décision.')
           : el('div', { class: 'cards' }, ...state.decisions.map(d => {
@@ -1125,7 +1168,7 @@
       else { state.decisions.unshift(data); logMEL('DECISION', `Décision : ${data.title} (${data.status})`); }
       save(); closeModal(); setTab('decisions');
     };
-    openModal(idEdit ? 'Éditer décision' : 'Nouvelle décision',
+    openModal(idEdit ? 'Éditer arbitrage' : 'Nouvel arbitrage',
       el('div', {},
         twoCol('Titre', title, 'Décideur', decider),
         field('Contexte', context),
@@ -1208,10 +1251,11 @@
   //   COMMS
   // ============================================================
   renderers.comms = (root) => {
-    root.appendChild(panel('Communications',
+    root.appendChild(panel('Communications (accessoire)',
       el('div', {},
+        el('p', { class: 'muted' }, 'Onglet accessoire — la communication externe single voice est portée par le Duty Manager et le VP. À utiliser ponctuellement pour tracer une comm sensible (affréteur, État pavillon, chantier).'),
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, 'Single voice principle (REX EDF/Marine) — toute comm externe validée par DIR ou COM.'),
+          el('div', { class: 'muted' }, `${state.comms.length} comm(s) tracée(s)`),
           el('button', { class: 'btn-primary', onclick: () => commsForm() }, '+ Comm (k)')
         ),
         state.comms.length === 0 ? el('div', { class: 'empty' }, 'Aucune comm.')
@@ -1603,6 +1647,82 @@
   // ============================================================
   //   SITREP CMA SHIPS (trame officielle)
   // ============================================================
+  // ============================================================
+  //   MON SITREP — bloc département rédigé par le Duty Officer
+  //   Alimente automatiquement le SITREP CMA Ships consolidé
+  //   (Dossiers du jour / Échéances 24-72 h / Frictions à signaler).
+  // ============================================================
+  renderers.dosit = (root) => {
+    const deptSel = el('select', {}, ...['FM','CR','FU'].map(c =>
+      el('option', { value: c, selected: state.lastDoDept === c }, c + ' — ' + (window.DEPARTMENTS.find(d => d.code === c) || {}).label)));
+    const formWrap = el('div', {});
+
+    const drawForm = () => {
+      formWrap.innerHTML = '';
+      const dept = deptSel.value;
+      state.lastDoDept = dept;
+      const d = state.deptSitreps[dept] || { status: 'green', dossiers: '', deadlines: '', frictions: '' };
+
+      const status = el('select', {}, ...[['green','VERT'],['amber','AMBRE'],['red','ROUGE']]
+        .map(([k, l]) => el('option', { value: k, selected: d.status === k }, l)));
+      const doName = el('input', { value: state.dutyOfficers[dept] || currentUserName(), placeholder: 'Nom DO ' + dept });
+      const dossiers = el('textarea', {
+        placeholder: 'Un dossier par ligne — ex. "CC MAUI : crack on ME starting air manifold, 4 days SGP 25/06"',
+        style: 'min-height:120px'
+      }, d.dossiers || '');
+      const deadlines = el('textarea', {
+        placeholder: 'Échéances 24-72 h — une par ligne',
+        style: 'min-height:90px'
+      }, d.deadlines || '');
+      const frictionsTxt = el('textarea', {
+        placeholder: 'Frictions à signaler — une par ligne',
+        style: 'min-height:80px'
+      }, d.frictions || '');
+
+      const submit = () => {
+        state.dutyOfficers[dept] = doName.value;
+        state.deptSitreps[dept] = {
+          status: status.value,
+          dossiers: dossiers.value,
+          deadlines: deadlines.value,
+          frictions: frictionsTxt.value,
+          updatedAt: nowISO(),
+          updatedBy: currentUserName() || doName.value
+        };
+        logMEL('DOSIT', `Mon SITREP ${dept} mis à jour par ${state.deptSitreps[dept].updatedBy}`);
+        toast('Bloc ' + dept + ' sauvegardé — visible dans le SITREP CMA Ships', 'ok');
+        save();
+        drawForm();
+      };
+
+      formWrap.appendChild(el('div', {},
+        twoCol('Statut département', status, 'Duty Officer (nom)', doName),
+        field('Dossiers du jour', dossiers),
+        field('Échéances 24-72 h', deadlines),
+        field('Frictions à signaler', frictionsTxt),
+        d.updatedAt
+          ? el('div', { class: 'muted', style: 'font-size:11.5px' },
+              'Dernière mise à jour : ' + fmtDTG(d.updatedAt) + ' · par ' + (d.updatedBy || '—'))
+          : el('div', { class: 'muted', style: 'font-size:11.5px' }, 'Jamais renseigné.'),
+        el('div', { class: 'flex', style: 'margin-top:10px' },
+          el('button', { class: 'btn-primary', onclick: submit }, '💾 Sauvegarder mon bloc'),
+          el('button', { class: 'btn-ghost', onclick: () => setTab('sitrep') }, '→ Voir SITREP CMA Ships'))
+      ));
+    };
+
+    deptSel.addEventListener('change', drawForm);
+
+    root.appendChild(panel('Mon SITREP départemental',
+      el('div', {},
+        el('p', { class: 'muted' },
+          'Vous êtes Duty Officer FM, CR ou FU : rédigez ici votre bloc département. Il est repris automatiquement par le Duty Manager dans le SITREP CMA Ships consolidé (08h30 Marseille). Texte libre — une ligne par item recommandé.'),
+        twoCol('Département', deptSel, '', el('span')),
+        formWrap
+      )
+    ));
+    drawForm();
+  };
+
   renderers.sitrep = (root) => {
     const today = new Date();
     const ctx = el('input', { value: state.sitrepContext || '', placeholder: 'ex. J + 0 Group MM' });
@@ -1640,9 +1760,9 @@
     const printBtn = el('button', { class: 'btn-ghost', onclick: () => window.print() }, '🖨 Imprimer');
     const dlBtn = el('button', { class: 'btn-ghost', onclick: () => download(`SITREP_CMA_${state.sitrepCounter || 'X'}.txt`, preview.textContent) }, '⬇ Télécharger');
 
-    root.appendChild(panel('SITREP CMA Ships — trame officielle',
+    root.appendChild(panel('SITREP CMA Ships — consolidé Duty Manager',
       el('div', {},
-        el('p', { class: 'muted' }, 'Diffusion VP + Heads + DM Marseille à 08h30. Consolide les 3 SITREPs départementaux (FM/CR/FU). Les dossiers du jour, échéances 24-72h et frictions sont remontés automatiquement depuis les onglets Incidents, Actions et Frictions taggés par département.'),
+        el('p', { class: 'muted' }, 'SITREP du Duty Manager — diffusion VP + Heads à 08h30 Marseille. Consolide les 3 SITREPs départementaux saisis par les Duty Officers dans l\'onglet "Mon SITREP". À défaut de saisie DO, les blocs sont remplis par agrégation automatique depuis Dossiers, Actions et Frictions taggés par département.'),
         twoCol('Contexte', ctx, 'Semaine', week),
         twoCol('Duty Manager Marseille', dm, 'Mode', mode),
         twoCol('Navires en escale', vPort, 'Navires en passage', vTransit),
@@ -1708,8 +1828,23 @@
 
     const frActives = (state.frictions || []).filter(f => f.status !== 'closed').length;
     const alerts24 = state.mel.filter(m =>
-      ['SECURITY','SAFETY','INC'].includes(m.cat) &&
+      ['DOSSIER','SECURITY','SAFETY','INC'].includes(m.cat) &&
       (Date.now() - new Date(m.ts).getTime()) <= 24 * 3600 * 1000).length;
+
+    // Préférence : si le DO a renseigné son SITREP départemental (texte libre),
+    // on utilise sa rédaction. Sinon on retombe sur l'agrégation automatique.
+    const doSitrep = (dept, kind, fallback) => {
+      const d = (state.deptSitreps && state.deptSitreps[dept]) || {};
+      const v = (d[kind] || '').trim();
+      if (!v) return fmt(fallback);
+      return v.split('\n').map(s => s.trim() ? '  ▸ ' + s : '').filter(Boolean).join('\n') || '  ▸ Néant.';
+    };
+    // Statut par dept : priorité au statut renseigné dans deptSitreps (DO), sinon deptStatus historique.
+    const deptStatusOf = (dept) => {
+      const d = (state.deptSitreps && state.deptSitreps[dept]) || {};
+      const s = d.status || (state.deptStatus && state.deptStatus[dept]) || 'green';
+      return deptLetter[s] || 'V';
+    };
 
     return window.SITREP_CMA_TEMPLATE
       .replace('{DAY}', dayStr)
@@ -1726,21 +1861,21 @@
       .replace('{TOP_MGMT_POINTS}', topMgmt.length === 0
         ? '  — Aucun point remonté au VP —'
         : topMgmt.map((p, idx) => `  ${idx + 1}. ${p.label}`).join('\n'))
-      .replace('{FM_STATUS}', deptLetter[state.deptStatus.FM] || 'V')
-      .replace('{CR_STATUS}', deptLetter[state.deptStatus.CR] || 'V')
-      .replace('{FU_STATUS}', deptLetter[state.deptStatus.FU] || 'V')
+      .replace('{FM_STATUS}', deptStatusOf('FM'))
+      .replace('{CR_STATUS}', deptStatusOf('CR'))
+      .replace('{FU_STATUS}', deptStatusOf('FU'))
       .replace('{DO_FM}', state.dutyOfficers.FM || '—')
       .replace('{DO_CR}', state.dutyOfficers.CR || '—')
       .replace('{DO_FU}', state.dutyOfficers.FU || '—')
-      .replace('{FM_DOSSIERS}', fmt(dossiersFor('FM')))
-      .replace('{FM_DEADLINES}', fmt(deadlinesFor('FM')))
-      .replace('{FM_FRICTIONS}', fmt(frictionsFor('FM')))
-      .replace('{CR_DOSSIERS}', fmt(dossiersFor('CR')))
-      .replace('{CR_DEADLINES}', fmt(deadlinesFor('CR')))
-      .replace('{CR_FRICTIONS}', fmt(frictionsFor('CR')))
-      .replace('{FU_DOSSIERS}', fmt(dossiersFor('FU')))
-      .replace('{FU_DEADLINES}', fmt(deadlinesFor('FU')))
-      .replace('{FU_FRICTIONS}', fmt(frictionsFor('FU')))
+      .replace('{FM_DOSSIERS}',  doSitrep('FM', 'dossiers',  dossiersFor('FM')))
+      .replace('{FM_DEADLINES}', doSitrep('FM', 'deadlines', deadlinesFor('FM')))
+      .replace('{FM_FRICTIONS}', doSitrep('FM', 'frictions', frictionsFor('FM')))
+      .replace('{CR_DOSSIERS}',  doSitrep('CR', 'dossiers',  dossiersFor('CR')))
+      .replace('{CR_DEADLINES}', doSitrep('CR', 'deadlines', deadlinesFor('CR')))
+      .replace('{CR_FRICTIONS}', doSitrep('CR', 'frictions', frictionsFor('CR')))
+      .replace('{FU_DOSSIERS}',  doSitrep('FU', 'dossiers',  dossiersFor('FU')))
+      .replace('{FU_DEADLINES}', doSitrep('FU', 'deadlines', deadlinesFor('FU')))
+      .replace('{FU_FRICTIONS}', doSitrep('FU', 'frictions', frictionsFor('FU')))
       .replace('{TRANSVERSE_FRICTIONS}', fmt(frictionsFor('XX')))
       .replace('{WEAK_SIGNALS}', fmt(weakSig.map(s => `[${s.horizon}] ${s.label}`)));
   }
@@ -1752,10 +1887,11 @@
     const byScope = (scope) => (state.frictions || []).filter(f => f.scope === scope);
     const open = (state.frictions || []).filter(f => f.status !== 'closed');
 
-    root.appendChild(panel('Frictions actives',
+    root.appendChild(panel('Frictions actives (synthèse Duty Manager)',
       el('div', {},
+        el('p', { class: 'muted' }, 'Synthèse Duty Manager : frictions inter-départements ou avec extérieur (clients, chantiers, autorités, Groupe) — cf. JD Duty Manager : "Identify, qualify and escalate transverse frictions". Inclut aussi les Points pour Top Management (3 max, attention VP) et les signaux faibles look-ahead J+1 / S+1.'),
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, `${open.length} friction(s) ouverte(s) — alimentent les blocs "Frictions" du SITREP CMA Ships.`),
+          el('div', { class: 'muted' }, `${open.length} friction(s) ouverte(s) — repris dans le SITREP CMA Ships`),
           el('button', { class: 'btn-primary', onclick: () => frictionForm() }, '+ Nouvelle friction')
         ),
         open.length === 0 ? el('div', { class: 'empty' }, 'Aucune friction active.')
@@ -2092,7 +2228,7 @@
     const mode = (window.MODES.find(m => m.code === state.alert) || window.MODES[0]);
     const recentTriggers = (state.triggerEvents || []).slice(0, 5);
 
-    root.appendChild(panel('Mode opérationnel',
+    root.appendChild(panel('Synthèse Duty Manager — Mode opérationnel',
       el('div', {},
         el('div', { class: 'flex', style: 'gap:12px;align-items:center;flex-wrap:wrap' },
           el('div', {},
@@ -2105,7 +2241,9 @@
           el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('triggers') }, '→ Critères'),
           el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('notif') }, '→ Modèles d\'alerte')
         ),
-        el('div', { class: 'muted', style: 'margin-top:8px' }, mode.desc)
+        el('div', { class: 'muted', style: 'margin-top:8px' }, mode.desc),
+        el('div', { class: 'muted', style: 'margin-top:6px;font-size:11.5px' },
+          'Onglet du Duty Manager : synthèse temps réel pour bascule du mode, escalade et appel des modèles d\'alerte.')
       )
     ));
 
