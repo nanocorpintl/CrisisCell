@@ -1,11 +1,13 @@
-/* CrisisCell — application principale (v2)
- * - Persistance chiffrée AES-GCM via CrisisAuth (window.CrisisAuth)
- * - UX accélérée : raccourcis clavier, FAB, auto-focus, datalists, Ctrl+Entrée
- * - Modules doctrinaux maritimes / militaires / nucléaire :
- *   COP, Incidents, Navires, MEL, Cellule, Actions, Décisions,
- *   Anticipation H+6/24/72, Comms, Contacts, Ressources, Risques,
- *   Battle rhythm, Passation de quart, SITREP, OPORD, Playbooks,
- *   CCIR, RETEX (AAR), Exercices (MSEL).
+/* CMA Ships — Outil de continuité opérationnelle (technique & équipages)
+ * - Périmètre : disponibilité technique des navires (FM), disponibilité
+ *   équipages (Crewing), avancement chantiers (Fleet Upgrade).
+ * - Hors périmètre : sécurité, sûreté, environnement (couverts par l'outil SSE).
+ * - Persistance chiffrée AES-GCM via CrisisAuth.
+ * - Modules : Veille (DM/DO) · COP · Incidents techniques · Navires · Journal
+ *   (Duty Log) · Cellule · Actions · Frictions · Décisions · Anticipation
+ *   (J+1/S+1) · Comms · Contacts · Ressources · Risques · Rythme · Passation
+ *   · SITREP CMA Ships · Playbooks techniques · RETEX · Exercices · Critères
+ *   de déclenchement · Modèles d'alerte.
  */
 (function () {
   'use strict';
@@ -69,7 +71,6 @@
       phase: 'reflex',
       opsPeriod: '',
       sitrepCounter: 0,
-      opordCounter: 0,
       weekNumber: '',
       sitrepContext: '',
       // Pilotage CMA Ships
@@ -123,9 +124,7 @@
       ],
       passations: [],
       sitreps: [],
-      opords: [],
       playbookState: {},
-      ccir: window.CCIR_TEMPLATE.map(c => ({ ...c, id: id(), items: [] })),
       retex: [],
       exercises: [],
       watch: { officer: '', assistant: '', startedAt: '' },
@@ -554,8 +553,8 @@
         c: 'cop', i: 'incidents', v: 'vessels', m: 'mel', t: 'team',
         a: 'actions', d: 'decisions', n: 'anticipation', k: 'comms',
         h: 'stakeholders', u: 'resources', r: 'risk', b: 'rhythm',
-        p: 'passation', s: 'sitrep', o: 'opord', l: 'playbooks',
-        e: 'ccir', x: 'retex', z: 'exercises',
+        p: 'passation', s: 'sitrep', l: 'playbooks',
+        x: 'retex', z: 'exercises',
         w: 'veille', q: 'triggers', f: 'notif',
         y: 'frictions'
       };
@@ -672,52 +671,19 @@
     const vesselsAtRisk = state.vessels.filter(v => v.status === 'incident' || v.status === 'risk');
     const overdue = state.actions.filter(a => a.status !== 'done' && a.due && new Date(a.due) < new Date()).length;
     const openActions = state.actions.filter(a => a.status !== 'done').length;
-    const phase = (window.CRISIS_PHASES.find(p => p.code === state.phase) || window.CRISIS_PHASES[0]);
+    const frActives = (state.frictions || []).filter(f => f.status !== 'closed').length;
+    const mode = window.MODES.find(m => m.code === state.alert) || window.MODES[0];
 
-    // En-tête : pill phase + KPIs alignés (sans gros bandeau)
-    const phasePillWrap = el('div', { style: 'position:relative;display:inline-block' });
-    const phasePill = el('div', { class: 'phase-pill ' + state.phase, onclick: (e) => {
-      e.stopPropagation();
-      const existing = phasePillWrap.querySelector('.phase-popover');
-      if (existing) { existing.remove(); return; }
-      const pop = el('div', { class: 'phase-popover' },
-        ...window.CRISIS_PHASES.map(p => el('button', { onclick: () => {
-          state.phase = p.code;
-          logMEL('INFO', 'Phase passée à ' + p.label);
-          save(); setTab('cop');
-        } },
-          el('span', {}, p.label),
-          el('span', { class: 'desc' }, p.desc)))
-      );
-      phasePillWrap.appendChild(pop);
-      const off = (ev) => {
-        if (!phasePillWrap.contains(ev.target)) { pop.remove(); document.removeEventListener('click', off); }
-      };
-      setTimeout(() => document.addEventListener('click', off), 10);
-    } },
-      el('span', { class: 'dot' }),
-      el('span', {}, 'Phase ' + phase.label),
-      el('span', { class: 'muted', style: 'margin-left:4px' }, '▾')
-    );
-    phasePillWrap.appendChild(phasePill);
-
-    root.appendChild(el('div', { class: 'flex', style: 'gap:10px;align-items:center' },
-      phasePillWrap,
-      state.opsPeriod ? el('div', { class: 'muted', style: 'font-size:12px' }, '· OPS ' + state.opsPeriod) : null
-    ));
-
-    if (state.phase === 'reflex') {
-      root.appendChild(el('div', { class: 'banner-3r' },
-        el('span', {}, '⚠'),
-        el('span', {}, el('strong', {}, '3R : '), 'Reculer · Rendre compte · Réfléchir — décisions par procédure.')
-      ));
+    if (state.opsPeriod) {
+      root.appendChild(el('div', { class: 'muted', style: 'font-size:12px' }, 'OPS Period · ' + state.opsPeriod));
     }
 
     const kpis = el('div', { class: 'grid-4' },
-      kpiTile('Alerte', state.alert.toUpperCase(),
-        ['red','black'].includes(state.alert) ? 'danger' : ['orange','yellow'].includes(state.alert) ? 'warn' : 'ok'),
-      kpiTile('Incidents actifs', activeIncidents.length, activeIncidents.length ? 'danger' : 'ok'),
-      kpiTile('Navires impactés', vesselsAtRisk.length, vesselsAtRisk.length ? 'warn' : 'ok'),
+      kpiTile('Mode', mode.statut,
+        mode.code === 'crise' ? 'danger' : mode.code === 'vigilance' ? 'warn' : 'ok',
+        mode.label),
+      kpiTile('Dossiers ouverts', activeIncidents.length, activeIncidents.length ? 'warn' : 'ok'),
+      kpiTile('Frictions actives', frActives, frActives ? 'warn' : 'ok'),
       kpiTile('Actions en retard', overdue, overdue ? 'danger' : (openActions ? 'warn' : 'ok'), `${openActions} ouvertes`)
     );
     root.appendChild(kpis);
@@ -742,17 +708,18 @@
       el('div', { class: 'qb-hint' }, 'L : focus rapide · Ctrl+Entrée : envoyer')
     ));
 
-    root.appendChild(panel('Incidents actifs',
+    root.appendChild(panel('Dossiers ouverts',
       activeIncidents.length === 0
-        ? el('div', { class: 'empty' }, 'Aucun incident actif.')
-        : tableEl(['Réf', 'Type', 'Navire', 'Sév.', 'Démarré'],
+        ? el('div', { class: 'empty' }, 'Aucun dossier ouvert.')
+        : tableEl(['Réf', 'Dépt', 'Type', 'Navire', 'Sév.', 'Démarré'],
           activeIncidents.slice(0, 8).map(i => [
             el('span', { class: 'mono' }, i.ref || ''),
+            badge(i.department || 'XX', 'blue'),
             i.type || '', i.vessel || '',
-            badge((i.ines != null ? 'INES ' + i.ines : (i.severity || '?').toUpperCase()), severityColor(i.severity)),
+            badge((i.severity || '?').toUpperCase(), severityColor(i.severity)),
             fmtTime(i.startedAt)
           ])),
-      el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'Gérer →')
+      el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'Voir tous →')
     ));
 
     root.appendChild(panel('MEL — derniers événements',
@@ -775,23 +742,22 @@
   //   INCIDENTS
   // ============================================================
   renderers.incidents = (root) => {
-    root.appendChild(panel('Incidents',
+    root.appendChild(panel('Dossiers techniques & équipages',
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, `${state.incidents.length} total — ${state.incidents.filter(i => i.status !== 'closed').length} actif(s)`),
-          el('button', { class: 'btn-primary', onclick: () => incidentForm() }, '+ Nouvel incident (i)')
+          el('div', { class: 'muted' }, `${state.incidents.length} total — ${state.incidents.filter(i => i.status !== 'closed').length} ouvert(s) · Hors SSE (couvert par outil dédié)`),
+          el('button', { class: 'btn-primary', onclick: () => incidentForm() }, '+ Nouveau dossier (i)')
         ),
         state.incidents.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun incident.')
+          ? el('div', { class: 'empty' }, 'Aucun dossier ouvert.')
           : tableEl(
-            ['Réf', 'Type', 'Navire', 'INES', 'ROE', 'Sévérité', 'Démarré', 'Statut', ''],
+            ['Réf', 'Dépt', 'Type', 'Navire', 'Sévérité', 'Démarré', 'Statut', ''],
             state.incidents.map(i => [
               el('span', { class: 'mono' }, i.ref || ''),
+              badge(i.department || 'XX', 'blue'),
               i.type || '',
               i.vessel || '',
-              i.ines != null ? badge(i.ines, i.ines >= 5 ? 'red' : i.ines >= 3 ? 'orange' : 'green') : '—',
-              i.roe ? badge('R' + i.roe, i.roe >= 4 ? 'red' : 'blue') : '—',
-              badge(i.severity, severityColor(i.severity)),
+              badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
               fmtTime(i.startedAt),
               badge(i.status, i.status === 'open' ? 'red' : i.status === 'monitoring' ? 'orange' : 'green'),
               el('div', { class: 'flex' },
@@ -800,50 +766,43 @@
               )
             ])
           )
-      ),
-      el('button', { class: 'btn-ghost btn-sm', onclick: () => {
-        openModal('Échelle de gravité (adaptée INES)',
-          tableEl(['Niv.', 'Label', 'Description'],
-            window.SEVERITY_SCALE.map(s => [
-              badge(s.level, s.level >= 5 ? 'red' : s.level >= 3 ? 'orange' : 'green'),
-              el('strong', {}, s.label), s.desc])));
-      } }, 'ⓘ Échelle INES')
+      )
     ));
   };
+  // Types de dossiers techniques & équipages
+  const INCIDENT_TYPES = [
+    'M/E', 'A/E', 'Propulsion', 'Drydock', 'Retrofit',
+    'PSC', 'Vetting', 'Bunker', 'Cargaison',
+    'Manning', 'Certification', 'MEDEVAC', 'Régulation', 'Autre'
+  ];
   function incidentForm(idEdit) {
-    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', ines: 2, department: 'FM' };
-    const ref = el('input', { value: inc.ref || ('INC-' + Date.now().toString(36).toUpperCase()) });
-    const type = el('select', {}, ...['Piraterie','Incendie','Collision','Échouement','MOB','Médical','Cyber','Pollution','Sûreté','Cargaison','Mécanique','Autre']
-      .map(t => el('option', { value: t, selected: inc.type === t }, t)));
+    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', department: 'FM', type: 'M/E' };
+    const ref = el('input', { value: inc.ref || ('DOS-' + Date.now().toString(36).toUpperCase()) });
+    const type = el('select', {}, ...INCIDENT_TYPES.map(t => el('option', { value: t, selected: inc.type === t }, t)));
     const department = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code, selected: (inc.department || 'FM') === d.code }, d.code + ' — ' + d.label)));
     const vessel = el('input', { list: 'dl-vessels', value: inc.vessel || '' });
     const severity = el('select', {}, ...['low','med','high','crit'].map(s => el('option', { value: s, selected: inc.severity === s }, s.toUpperCase())));
-    const ines = el('select', {}, ...window.SEVERITY_SCALE.map(s => el('option', { value: s.level, selected: (inc.ines ?? 2) == s.level }, `${s.level} — ${s.label}`)));
-    const roe = el('select', {}, el('option', { value: '' }, '—'),
-      ...window.ROE_LEVELS.map(r => el('option', { value: r.level, selected: inc.roe == r.level }, `R${r.level} — ${r.label}`)));
     const status = el('select', {}, ...['open','monitoring','closed'].map(s => el('option', { value: s, selected: inc.status === s }, s)));
     const startedAt = el('input', { type: 'datetime-local', value: inc.startedAt ? new Date(inc.startedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16) });
-    const summary = el('textarea', { placeholder: '5W : Who, What, Where, When, Why' }, inc.summary || '');
-    const intent = el('textarea', { placeholder: 'Intention de la Direction de crise — résultat à atteindre, contraintes' }, inc.intent || '');
-    const endState = el('textarea', { placeholder: 'État final recherché (end-state) : indicateurs de fin de crise' }, inc.endState || '');
+    const summary = el('textarea', { placeholder: 'Description : qui, quoi, où, conséquence opérationnelle, action en cours' }, inc.summary || '');
 
     const submit = () => {
       const data = {
         id: inc.id || id(),
         ref: ref.value, type: type.value, vessel: vessel.value,
         department: department.value,
-        severity: severity.value, ines: parseInt(ines.value, 10), roe: roe.value ? parseInt(roe.value, 10) : null,
+        severity: severity.value,
         status: status.value,
         startedAt: new Date(startedAt.value).toISOString(),
-        summary: summary.value, intent: intent.value, endState: endState.value
+        summary: summary.value
       };
       if (idEdit) {
         state.incidents[state.incidents.findIndex(i => i.id === idEdit)] = data;
-        logMEL('INC', `Incident ${data.ref} mis à jour (${data.status})`);
+        logMEL('DOSSIER', `Dossier ${data.ref} mis à jour (${data.status})`);
       } else {
         state.incidents.push(data);
-        logMEL('INC', `Nouvel incident [${data.department}] ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity}, INES ${data.ines})`);
-        if (data.severity === 'crit' || data.ines >= 5) state.alert = 'crise';
+        logMEL('DOSSIER', `Nouveau dossier [${data.department}] ${data.ref} — ${data.type} sur ${data.vessel || 'n/a'} (sev ${data.severity})`);
+        if (data.severity === 'crit') state.alert = 'crise';
         else if (data.severity === 'high' && state.alert === 'nominal') state.alert = 'vigilance';
         if (data.vessel) {
           const v = state.vessels.find(x => x.name === data.vessel);
@@ -855,25 +814,18 @@
       save(); closeModal(); setTab('incidents');
     };
 
-    const advOpen = !!(inc.roe || inc.intent || inc.endState);
     const form = el('div', {},
       twoCol('Référence', ref, 'Département', department),
       twoCol('Type', type, 'Navire', vessel),
       twoCol('Sévérité', severity, 'Statut', status),
       field('Date début', startedAt),
-      field('Résumé (5W)', summary),
-      el('details', { class: 'adv', open: advOpen ? 'open' : false },
-        el('summary', {}, 'Détails avancés (INES · ROE · intention · end-state)'),
-        twoCol('Niveau INES', ines, 'Niveau ROE', roe),
-        field('Intention de la Direction de crise', intent),
-        field('End-state (situation finale recherchée)', endState)
-      ),
+      field('Description', summary),
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Mettre à jour' : 'Créer'),
         el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')
       )
     );
-    openModal(idEdit ? 'Modifier incident' : 'Nouvel incident', form, { onSubmit: submit });
+    openModal(idEdit ? 'Modifier dossier' : 'Nouveau dossier', form, { onSubmit: submit });
   }
   function deleteIncident(idDel) {
     if (!confirm('Supprimer cet incident ?')) return;
@@ -1576,7 +1528,7 @@
       const open = state.actions.filter(a => a.status !== 'done');
       const incs = state.incidents.filter(i => i.status !== 'closed');
       const tip = [
-        `Niveau d'alerte : ${state.alert.toUpperCase()} — Phase ${state.phase}`,
+        `Mode CMA Ships : ${state.alert.toUpperCase()}`,
         `Incidents actifs : ${incs.length}`,
         `Actions ouvertes (P1) : ${open.filter(a => a.priority === 'P1').length}`,
         `Total actions ouvertes : ${open.length}`,
@@ -1899,111 +1851,12 @@
   }
 
   // ============================================================
-  //   OPORD GENERATOR (5 paragraphes militaires)
-  // ============================================================
-  renderers.opord = (root) => {
-    const inputs = {
-      classif: el('select', {}, ...['NON CLASSIFIÉ','DIFFUSION RESTREINTE','CONFIDENTIEL'].map(c => el('option', { value: c }, c))),
-      issuer: el('input', { value: currentUserName() + ' — Direction de crise' }),
-      dest: el('input', { value: 'Cellule de crise CMA Ships' }),
-      ref: el('input', { placeholder: 'SITREP n°x du DTG…' }),
-      sitContext: el('textarea', { placeholder: 'Menace / contexte / météo / cinétique' }),
-      sitFriendly: el('textarea', { placeholder: 'Forces amies, ressources mobilisées' }),
-      sitAssumptions: el('textarea', { placeholder: 'Hypothèses retenues' }),
-      mission: el('textarea', { placeholder: 'QUI fait QUOI, QUAND, OÙ, et POURQUOI' }),
-      intent: el('textarea', { placeholder: 'Intention de la Direction de crise — résultat à atteindre' }),
-      concept: el('textarea', { placeholder: 'Concept d\'opération' }),
-      endState: el('textarea', { placeholder: 'État final recherché' }),
-      nogo: el('textarea', { placeholder: 'No-go criteria : conditions d\'arrêt' }),
-      tasks: el('textarea', { placeholder: 'Tâches par cellule (OPS / LOG / PIO / LEG…)' }),
-      coordination: el('textarea', { placeholder: 'Timing, points de contrôle' }),
-      support: el('textarea', { placeholder: 'Logistique : salvage, P&I, agences, médical' }),
-      commandChain: el('textarea', { placeholder: 'Chaîne de commandement, succession' }),
-      comms: el('textarea', { placeholder: 'Canaux, fréquences, classification' }),
-      reporting: el('input', { value: 'SITREP toutes les 6H' }),
-      signature: el('input', { value: currentUserName() })
-    };
-    const preview = el('pre', { class: 'sitrep-preview' }, '— Cliquez "Générer OPORD" —');
-    const buildBtn = el('button', { class: 'btn-primary', onclick: () => {
-      state.opordCounter = (state.opordCounter || 0) + 1;
-      const txt = renderOPORD(inputs);
-      preview.textContent = txt;
-      state.opords.unshift({ id: id(), ts: nowISO(), num: state.opordCounter, text: txt });
-      logMEL('DECISION', `OPORD N°${state.opordCounter} émis`);
-      save();
-    } }, '⚡ Générer OPORD');
-
-    root.appendChild(panel('Générateur OPORD — ordre d\'opération militaire (5 paragraphes)',
-      el('div', {},
-        el('p', { class: 'muted' }, 'Format NATO/US Army : Situation / Mission / Exécution / Soutien / Commandement & transmissions. Permet à toute la cellule d\'avoir l\'intention et le concept partagés.'),
-        twoCol('Classification', inputs.classif, 'Référence', inputs.ref),
-        twoCol('Émetteur', inputs.issuer, 'Destinataire', inputs.dest),
-        el('h4', {}, '1. Situation'),
-        field('Contexte', inputs.sitContext),
-        field('Forces amies / ressources', inputs.sitFriendly),
-        field('Hypothèses', inputs.sitAssumptions),
-        el('h4', {}, '2. Mission'),
-        field('Mission (5W)', inputs.mission),
-        el('h4', {}, '3. Exécution'),
-        field('Intention de la Direction de crise', inputs.intent),
-        field('Concept d\'opération', inputs.concept),
-        field('End-state', inputs.endState),
-        field('No-go criteria', inputs.nogo),
-        field('Tâches par cellule', inputs.tasks),
-        field('Coordination', inputs.coordination),
-        el('h4', {}, '4. Soutien'),
-        field('Logistique', inputs.support),
-        el('h4', {}, '5. Commandement & transmissions'),
-        field('Chaîne de commandement', inputs.commandChain),
-        field('Canaux et fréquences', inputs.comms),
-        twoCol('Cadence SITREP', inputs.reporting, 'Signature', inputs.signature),
-        el('div', { class: 'flex', style: 'margin-top:10px' },
-          buildBtn,
-          el('button', { class: 'btn-ghost', onclick: () => window.print() }, '🖨 Imprimer'),
-          el('button', { class: 'btn-ghost', onclick: () => download(`OPORD_${state.opordCounter || 'X'}.txt`, preview.textContent) }, '⬇ Télécharger')))));
-    root.appendChild(panel('Aperçu', preview));
-    if (state.opords.length) {
-      root.appendChild(panel('OPORDs précédents',
-        tableEl(['N°', 'Émis', ''], state.opords.map(s => [
-          'N°' + s.num, fmtDTG(s.ts),
-          el('div', { class: 'flex' },
-            el('button', { class: 'btn-ghost btn-sm', onclick: () => { preview.textContent = s.text; window.scrollTo({ top: 0, behavior: 'smooth' }); } }, 'Recharger'),
-            el('button', { class: 'btn-danger btn-sm', onclick: () => { state.opords = state.opords.filter(x => x.id !== s.id); save(); setTab('opord'); } }, '✕'))
-        ]))));
-    }
-  };
-  function renderOPORD(i) {
-    return window.OPORD_TEMPLATE
-      .replace('{DTG}', fmtDTG(nowISO()))
-      .replace('{NUM}', String(state.opordCounter || '-').padStart(3, '0'))
-      .replace('{ISSUER}', i.issuer.value)
-      .replace('{DEST}', i.dest.value)
-      .replace('{CLASSIF}', i.classif.value)
-      .replace('{REF}', i.ref.value || '-')
-      .replace('{SIT_CONTEXT}', i.sitContext.value || '-')
-      .replace('{SIT_FRIENDLY}', i.sitFriendly.value || '-')
-      .replace('{SIT_ASSUMPTIONS}', i.sitAssumptions.value || '-')
-      .replace('{MISSION}', i.mission.value || '-')
-      .replace('{INTENT}', i.intent.value || '-')
-      .replace('{CONCEPT}', i.concept.value || '-')
-      .replace('{END_STATE}', i.endState.value || '-')
-      .replace('{NOGO}', i.nogo.value || '-')
-      .replace('{TASKS}', i.tasks.value || '-')
-      .replace('{COORDINATION}', i.coordination.value || '-')
-      .replace('{SUPPORT}', i.support.value || '-')
-      .replace('{COMMAND_CHAIN}', i.commandChain.value || '-')
-      .replace('{COMMS}', i.comms.value || '-')
-      .replace('{REPORTING}', i.reporting.value || 'SITREP 6H')
-      .replace('{SIGNATURE}', i.signature.value || '-');
-  }
-
-  // ============================================================
-  //   PLAYBOOKS
+  //   PLAYBOOKS TECHNIQUES & CREWING
   // ============================================================
   renderers.playbooks = (root) => {
-    root.appendChild(panel('Playbooks d\'urgence',
+    root.appendChild(panel('Playbooks techniques & équipages',
       el('div', {},
-        el('p', { class: 'muted' }, 'ISM Code, IMO A.1072(28), BMP5, SOLAS, ISPS, IAMSAR, BIMCO Cyber.'),
+        el('p', { class: 'muted' }, 'Avarie M/E, A/E, propulsion, drydock, retrofit, PSC, bunker, manning, certification, vetting. Hors périmètre SSE (couvert par l\'outil sécurité/sûreté/environnement).'),
         el('div', { class: 'cards' }, ...window.PLAYBOOKS.map(pb => el('div', { class: 'card' },
           el('div', { class: 'flex-between' },
             el('div', { class: 'card-title' }, pb.title),
@@ -2046,37 +1899,6 @@
     logMEL('ACTION', `Playbook "${pb.title}" activé : ${pb.steps.length} actions créées`);
     save(); closeModal(); setTab('actions');
   }
-
-  // ============================================================
-  //   CCIR
-  // ============================================================
-  renderers.ccir = (root) => {
-    root.appendChild(panel('CCIR — informations critiques pour la Direction de crise',
-      el('div', {},
-        el('p', { class: 'muted' }, 'PIR (renseignement prioritaire), FFIR (état force amie), EEFI (à NE PAS divulguer).'),
-        ...state.ccir.map(c => {
-          const itemsBox = el('div', {});
-          (c.items || []).forEach((it, idx) => {
-            itemsBox.appendChild(el('div', { class: 'pb-step' },
-              el('div', { class: 'pb-text' }, '• ' + it),
-              el('button', { class: 'btn-danger btn-sm', onclick: () => { c.items.splice(idx, 1); save(); setTab('ccir'); } }, '✕')));
-          });
-          const input = el('input', { placeholder: 'Information…' });
-          const addBtn = el('button', { class: 'btn-primary btn-sm', onclick: () => {
-            if (!input.value.trim()) return;
-            c.items = c.items || [];
-            c.items.push(input.value.trim());
-            save(); setTab('ccir');
-          } }, '+ Ajouter');
-          input.addEventListener('keydown', e => { if (e.key === 'Enter') addBtn.click(); });
-          return el('div', { class: 'card' },
-            el('div', { class: 'card-title' }, badge(c.type, c.type === 'EEFI' ? 'red' : c.type === 'PIR' ? 'orange' : 'blue'), ' ' + c.label),
-            itemsBox,
-            el('div', { class: 'flex', style: 'margin-top:8px' }, input, addBtn));
-        })
-      )
-    ));
-  };
 
   // ============================================================
   //   RETEX / AAR
