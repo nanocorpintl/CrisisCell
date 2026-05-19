@@ -257,6 +257,7 @@ Duty Manager Marseille : {DM_NAME}
 Mode : {MODE}
 
 ──── STATUT GLOBAL : {STATUT} ────
+Classification dossiers ouverts : {CLASSIFICATION_SUMMARY}
 
 ▸ SYNTHÈSE 24 h
 {SYNTHESIS}
@@ -323,6 +324,18 @@ Frictions à signaler
 ════════════════════════════════════════════════════════════════
 {WEAK_SIGNALS}
 `;
+
+// Niveaux de classification des dossiers — du plus restreint au plus ouvert.
+window.CLASSIFICATIONS = [
+  { code: 'CONFIDENTIAL', label: 'CONFIDENTIAL', short: 'CONF', color: 'red',
+    desc: 'Diffusion strictement contrôlée — VP, Heads, légal, P&I. Pas de diffusion externe.' },
+  { code: 'RESTRICTED',   label: 'RESTRICTED',   short: 'REST', color: 'orange',
+    desc: 'Diffusion restreinte — cellule de crise, autorités si requis, classification, P&I.' },
+  { code: 'INTERNAL',     label: 'INTERNAL',     short: 'INT',  color: 'blue',
+    desc: 'Diffusion interne CMA Ships — pilotage opérationnel courant.' },
+  { code: 'PUBLIC',       label: 'PUBLIC',       short: 'PUB',  color: 'green',
+    desc: 'Information sans restriction — peut être diffusée à l\'extérieur.' }
+];
 
 // Conservé pour compat ascendante des triggers : alias vers MODES.
 window.POSTURES = window.MODES;
