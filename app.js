@@ -181,6 +181,7 @@
     (state.incidents || []).forEach(i => {
       if (i.offhireEstimated == null) i.offhireEstimated = 0;
       if (i.offhireActual == null) i.offhireActual = null;
+      if (!i.classification) i.classification = 'INTERNAL';
     });
   }
 
@@ -723,6 +724,20 @@
     );
     root.appendChild(kpis);
 
+    // Classification — répartition des dossiers ouverts
+    const clsCount = {};
+    activeIncidents.forEach(i => { const k = i.classification || 'INTERNAL'; clsCount[k] = (clsCount[k] || 0) + 1; });
+    root.appendChild(panel('Classification des dossiers ouverts',
+      el('div', { class: 'flex', style: 'gap:10px;flex-wrap:wrap' },
+        ...window.CLASSIFICATIONS.map(c => {
+          const n = clsCount[c.code] || 0;
+          return el('div', { style: 'padding:8px 12px;border:1px solid var(--border);border-radius:6px;min-width:140px' },
+            el('div', {}, badge(c.short, c.color), ' ', el('span', { class: 'muted', style: 'font-size:11px' }, c.label)),
+            el('div', { style: 'font-size:22px;font-weight:700;margin-top:4px' }, n));
+        })
+      )
+    ));
+
     // Off-hire — panel dédié : 4 KPIs (En cours · Semaine · YTD · vs Objectif)
     const offM = computeOffhireMetrics();
     const ratioTone = offM.ratio >= 100 ? 'danger' : offM.ratio >= 75 ? 'warn' : 'ok';
@@ -775,14 +790,18 @@
     root.appendChild(panel('Dossiers ouverts',
       activeIncidents.length === 0
         ? el('div', { class: 'empty' }, 'Aucun dossier ouvert.')
-        : tableEl(['Réf', 'Dépt', 'Type', 'Navire', 'Sév.', 'Démarré'],
-          activeIncidents.slice(0, 8).map(i => [
-            el('span', { class: 'mono' }, i.ref || ''),
-            badge(i.department || 'XX', 'blue'),
-            i.type || '', i.vessel || '',
-            badge((i.severity || '?').toUpperCase(), severityColor(i.severity)),
-            fmtTime(i.startedAt)
-          ])),
+        : tableEl(['Réf', 'Dépt', 'Type', 'Navire', 'Sév.', 'Class.', 'Démarré'],
+          activeIncidents.slice(0, 8).map(i => {
+            const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+            return [
+              el('span', { class: 'mono' }, i.ref || ''),
+              badge(i.department || 'XX', 'blue'),
+              i.type || '', i.vessel || '',
+              badge((i.severity || '?').toUpperCase(), severityColor(i.severity)),
+              badge(cls.short, cls.color),
+              fmtTime(i.startedAt)
+            ];
+          })),
       el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'Voir tous →')
     ));
 
@@ -816,7 +835,7 @@
         state.incidents.length === 0
           ? el('div', { class: 'empty' }, 'Aucun dossier ouvert.')
           : tableEl(
-            ['Réf', 'Dépt', 'Type', 'Navire', 'Sévérité', 'Off-hire (h)', 'Démarré', 'Statut', ''],
+            ['Réf', 'Dépt', 'Type', 'Navire', 'Sév.', 'Class.', 'Off-hire (h)', 'Démarré', 'Statut', ''],
             state.incidents.map(i => {
               const isClosed = i.status === 'closed';
               const value = isClosed
@@ -825,12 +844,14 @@
               const color = isClosed
                 ? (i.offhireActual == null ? 'red' : 'grey')
                 : ((i.offhireEstimated || 0) > 72 ? 'orange' : 'blue');
+              const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
               return [
                 el('span', { class: 'mono' }, i.ref || ''),
                 badge(i.department || 'XX', 'blue'),
                 i.type || '',
                 i.vessel || '',
                 badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+                badge(cls.short, cls.color),
                 badge(value, color),
                 fmtTime(i.startedAt),
                 badge(i.status, i.status === 'open' ? 'red' : i.status === 'monitoring' ? 'orange' : 'green'),
@@ -851,13 +872,15 @@
     'Manning', 'Certification', 'MEDEVAC', 'Régulation', 'Autre'
   ];
   function incidentForm(idEdit) {
-    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', department: 'FM', type: 'M/E' };
+    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', department: 'FM', type: 'M/E', classification: 'INTERNAL' };
     const ref = el('input', { value: inc.ref || ('DOS-' + Date.now().toString(36).toUpperCase()) });
     const type = el('select', {}, ...INCIDENT_TYPES.map(t => el('option', { value: t, selected: inc.type === t }, t)));
     const department = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code, selected: (inc.department || 'FM') === d.code }, d.code + ' — ' + d.label)));
     const vessel = el('input', { list: 'dl-vessels', value: inc.vessel || '' });
     const severity = el('select', {}, ...['low','med','high','crit'].map(s => el('option', { value: s, selected: inc.severity === s }, s.toUpperCase())));
     const status = el('select', {}, ...['open','monitoring','closed'].map(s => el('option', { value: s, selected: inc.status === s }, s)));
+    const classification = el('select', {}, ...window.CLASSIFICATIONS.map(c =>
+      el('option', { value: c.code, selected: (inc.classification || 'INTERNAL') === c.code }, c.label)));
     const startedAt = el('input', { type: 'datetime-local', value: inc.startedAt ? new Date(inc.startedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16) });
     const summary = el('textarea', { placeholder: 'Description : qui, quoi, où, conséquence opérationnelle, action en cours' }, inc.summary || '');
     const sitrepLine = el('input', {
@@ -903,6 +926,7 @@
         startedAt: new Date(startedAt.value).toISOString(),
         summary: summary.value,
         sitrepLine: sitrepLine.value || `${vessel.value || 'n/a'} — ${type.value}` + (summary.value ? ' : ' + summary.value.split('\n')[0].slice(0, 120) : ''),
+        classification: classification.value,
         offhireEstimated: parseFloat(offhireEst.value) || 0,
         offhireActual: offhireAct.value === '' ? null : parseFloat(offhireAct.value)
       };
@@ -931,7 +955,8 @@
     const form = el('div', {},
       twoCol('Référence', ref, 'Département', department),
       twoCol('Type', type, 'Navire', vessel),
-      twoCol('Sévérité', severity, 'Statut', status),
+      twoCol('Sévérité', severity, 'Classification', classification),
+      field('Statut', status),
       field('Date début', startedAt),
       field('Synthèse une ligne (apparaît dans le SITREP du DO)', sitrepLine),
       field('Description détaillée', summary),
@@ -1772,12 +1797,14 @@
             const v = (i.vessel || 'n/a').toUpperCase();
             const raw = (i.sitrepLine || i.type || '').trim();
             const line = raw.toUpperCase().startsWith(v) ? raw : (raw ? v + ' — ' + raw : v);
+            const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
             return el('div', {
               class: 'pb-step',
               style: 'cursor:pointer',
               onclick: () => incidentForm(i.id)
             },
               badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+              badge(cls.short, cls.color),
               el('div', { class: 'pb-text', style: 'flex:1' },
                 el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref + ' · '),
                 line)
@@ -2034,9 +2061,13 @@
     const deptLetter = { green: 'V', amber: 'A', red: 'R' };
 
     // Dossiers du jour = synthèse une ligne de chaque dossier ouvert du dépt.
-    // Toujours préfixée du nom du navire, triée par sévérité décroissante.
+    // Préfixée du nom du navire + sévérité + classification. Triée par sévérité.
     const sevOrder = { crit: 0, high: 1, med: 2, low: 3 };
     const sevLabel = { crit: 'CRIT', high: 'HIGH', med: 'MED', low: 'LOW' };
+    const clsShort = (code) => {
+      const c = window.CLASSIFICATIONS.find(x => x.code === (code || 'INTERNAL'));
+      return c ? c.short : 'INT';
+    };
     const dossiersFor = (dept) => state.incidents
       .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept)
       .slice()
@@ -2044,9 +2075,8 @@
       .map(i => {
         const v = (i.vessel || 'n/a').toUpperCase();
         const raw = (i.sitrepLine || `${i.type}${i.summary ? ' : ' + i.summary.replace(/\n/g, ' ').slice(0, 120) : ''}`).trim();
-        // Évite de dupliquer le nom du navire s'il est déjà au début
         const line = raw.toUpperCase().startsWith(v) ? raw : `${v} — ${raw}`;
-        return `[${sevLabel[i.severity] || '—'}] ${line}`;
+        return `[${sevLabel[i.severity] || '—'} · ${clsShort(i.classification)}] ${line}`;
       });
 
     // Échéances 24-72h = actions du dept dont due dans 24-72h
@@ -2111,6 +2141,15 @@
       .replace('{OFFHIRE_TARGET}', offhireM.ytdTarget)
       .replace('{OFFHIRE_RATIO}',  offhireM.ratio)
       .replace('{N_VESSELS}',      offhireM.nVessels)
+      .replace('{CLASSIFICATION_SUMMARY}', (() => {
+        const opens = state.incidents.filter(i => i.status !== 'closed');
+        const counts = {};
+        opens.forEach(i => { const k = i.classification || 'INTERNAL'; counts[k] = (counts[k] || 0) + 1; });
+        const parts = window.CLASSIFICATIONS
+          .filter(c => counts[c.code])
+          .map(c => `${c.short}=${counts[c.code]}`);
+        return parts.length ? parts.join(' · ') : 'Néant';
+      })())
       .replace('{TOP_MGMT_POINTS}', topMgmt.length === 0
         ? '  — Aucun point remonté au VP —'
         : topMgmt.map((p, idx) => `  ${idx + 1}. ${p.label}`).join('\n'))
@@ -2601,7 +2640,8 @@
         severity: trg.mode === 'crise' ? 'crit' : trg.mode === 'vigilance' ? 'high' : 'med',
         status: 'open', startedAt: ev.ts,
         summary: note.value,
-        sitrepLine: sitrepLine.value || (vesselSel.value ? vesselSel.value + ' — ' + trg.label : trg.label)
+        sitrepLine: sitrepLine.value || (vesselSel.value ? vesselSel.value + ' — ' + trg.label : trg.label),
+        classification: 'INTERNAL'
       });
       if (vesselSel.value) {
         const v = state.vessels.find(x => x.name === vesselSel.value);
