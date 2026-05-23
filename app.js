@@ -366,7 +366,16 @@
     const moreBtn = $('#tabMoreBtn');
     const morePop = $('#tabMorePop');
     if (moreBtn && morePop) {
-      moreBtn.addEventListener('click', (e) => { e.stopPropagation(); morePop.hidden = !morePop.hidden; });
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        morePop.hidden = !morePop.hidden;
+        if (!morePop.hidden) {
+          // Positionne le popup en fixed (.tabs overflow-x clippe sinon)
+          const r = moreBtn.getBoundingClientRect();
+          morePop.style.top = (r.bottom + 4) + 'px';
+          morePop.style.right = (window.innerWidth - r.right) + 'px';
+        }
+      });
       morePop.querySelectorAll('.tab-pop').forEach(b => {
         b.addEventListener('click', () => { setTab(b.dataset.tab); morePop.hidden = true; });
       });

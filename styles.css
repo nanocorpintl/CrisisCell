@@ -875,7 +875,7 @@ th {
 }
 
 .tab-more-pop {
-  position: absolute; top: 100%; right: 0;
+  position: fixed; /* JS calcule top/right pour échapper à overflow .tabs */
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
