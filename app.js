@@ -43,6 +43,13 @@
     if (isNaN(d.getTime())) return '';
     return d.toISOString().replace('T', ' ').slice(0, 16) + 'Z';
   }
+  // Format unifié pour les heures off-hire : entier + " h"
+  function fmtH(v) {
+    if (v == null || v === '') return '—';
+    const n = parseFloat(v);
+    if (isNaN(n)) return '—';
+    return Math.round(n) + ' h';
+  }
   function el(tag, attrs = {}, ...children) {
     const e = document.createElement(tag);
     Object.entries(attrs || {}).forEach(([k, v]) => {
@@ -142,6 +149,17 @@
       },
       lastDoDept: 'FM'
     };
+  }
+
+  // Purge complète des données métier — préserve le mot de passe et la
+  // configuration d'authentification. Démarre sur un état propre,
+  // sans navires ni contacts, prêt pour un nouvel import CSV.
+  function purgeAllData() {
+    const fresh = defaultState();
+    fresh.vessels = [];
+    fresh.stakeholders = [];
+    state = fresh;
+    save();
   }
 
   // Migration automatique des données antérieures vers le schéma CMA Ships.
@@ -362,25 +380,30 @@
     document.querySelectorAll('.tab[data-tab]').forEach(t => {
       t.addEventListener('click', () => setTab(t.dataset.tab));
     });
-    // Onglet "Plus ▾" + son popover
+    // Onglet "Plus ▾" + son popover (détaché du conteneur .tabs pour
+    // échapper au clipping overflow-x:auto)
     const moreBtn = $('#tabMoreBtn');
     const morePop = $('#tabMorePop');
     if (moreBtn && morePop) {
+      // Move out of .tabs to body
+      if (morePop.parentNode !== document.body) document.body.appendChild(morePop);
+      morePop.style.position = 'fixed';
       moreBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        morePop.hidden = !morePop.hidden;
-        if (!morePop.hidden) {
-          // Positionne le popup en fixed (.tabs overflow-x clippe sinon)
+        if (morePop.hidden) {
           const r = moreBtn.getBoundingClientRect();
           morePop.style.top = (r.bottom + 4) + 'px';
           morePop.style.right = (window.innerWidth - r.right) + 'px';
+          morePop.hidden = false;
+        } else {
+          morePop.hidden = true;
         }
       });
       morePop.querySelectorAll('.tab-pop').forEach(b => {
         b.addEventListener('click', () => { setTab(b.dataset.tab); morePop.hidden = true; });
       });
       document.addEventListener('click', (e) => {
-        if (!morePop.hidden && !morePop.contains(e.target) && e.target !== moreBtn) morePop.hidden = true;
+        if (!morePop.hidden && !morePop.contains(e.target) && e.target !== moreBtn && !moreBtn.contains(e.target)) morePop.hidden = true;
       });
     }
     const sel = $('#alertSelect');
@@ -753,15 +776,15 @@
     const ratioTone = offM.ratio >= 100 ? 'danger' : offM.ratio >= 75 ? 'warn' : 'ok';
     const offhireKpis = el('div', { class: 'grid-4' },
       kpiTile('Estimé (en cours)',
-        offhireOpen.toString() + ' h',
+        fmtH(offhireOpen),
         offhireOpen > 240 ? 'danger' : offhireOpen > 72 ? 'warn' : 'ok',
         `FM ${offhireByDept('FM')} · CR ${offhireByDept('CR')} · FU ${offhireByDept('FU')}`),
       kpiTile('Risque semaine (nouveau)',
-        offM.weekNew.toString() + ' h',
+        fmtH(offM.weekNew),
         offM.weekNew > 48 ? 'warn' : 'ok',
         'dossiers ouverts depuis lundi'),
       kpiTile('YTD réalisé',
-        offM.ytdActual.toString() + ' h',
+        fmtH(offM.ytdActual),
         'muted',
         `${offM.daysElapsed} j depuis 1ᵉʳ janvier`),
       kpiTile('YTD vs objectif',
@@ -849,8 +872,8 @@
             state.incidents.map(i => {
               const isClosed = i.status === 'closed';
               const value = isClosed
-                ? (i.offhireActual != null ? i.offhireActual + ' h' : '⚠ non chiffré')
-                : ((i.offhireEstimated || 0) + ' h est.');
+                ? (i.offhireActual != null ? fmtH(i.offhireActual) : '⚠ non chiffré')
+                : (fmtH(i.offhireEstimated || 0) + ' est.');
               const color = isClosed
                 ? (i.offhireActual == null ? 'red' : 'grey')
                 : ((i.offhireEstimated || 0) > 72 ? 'orange' : 'blue');
@@ -1352,6 +1375,52 @@
       ));
     }
 
+    // ===== Purge totale + ré-import (cycle démo) =====
+    const csvFileReset = el('input', { type: 'file', accept: '.csv,text/csv', hidden: 'hidden' });
+    csvFileReset.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const rows = parseCSV(ev.target.result);
+          if (rows.length === 0) { toast('CSV vide ou format invalide', 'warn'); return; }
+          openImportPreview(rows);
+        } catch (err) { toast('Erreur parsing CSV : ' + err.message, 'danger'); }
+      };
+      reader.readAsText(f, 'utf-8');
+    });
+
+    root.appendChild(panel('Cycle démo — purge & rejeu',
+      el('div', {},
+        el('p', { class: 'muted' },
+          'Pour relancer une démo from scratch : purgez toutes les données métier (navires, dossiers, SITREPs, journal, actions, frictions, etc.) puis ré-importez le CSV avec génération de dossiers synthétiques. Le mot de passe et l\'authentification sont conservés.'),
+        el('div', { class: 'flex', style: 'gap:8px;flex-wrap:wrap;margin-top:10px' },
+          el('button', { class: 'btn-danger', onclick: () => {
+            const c = prompt('Cette action va EFFACER toutes les données métier (navires, dossiers, SITREPs, journal, actions, frictions, équipe, contacts…).\n\nLe mot de passe est conservé.\n\nTapez "PURGE" pour confirmer :');
+            if (c !== 'PURGE') return;
+            purgeAllData();
+            toast('Toutes les données métier effacées', 'ok');
+            setTab('vessels');
+          } }, '⟲ Purger toutes les données métier'),
+          el('button', { class: 'btn-primary', onclick: () => csvFileReset.click() }, '⬆ Ré-importer un CSV'),
+          el('button', { class: 'btn-ghost', onclick: () => {
+            if (!confirm('Cycle complet : purge + restauration des 3 navires CMA CGM par défaut + 30 dossiers synthétiques + 1 SITREP. Continuer ?')) return;
+            purgeAllData();
+            // Restaure les 3 navires CMA par défaut
+            state.vessels = defaultState().vessels;
+            state.stakeholders = defaultState().stakeholders;
+            const created = generateSyntheticDossiers(30);
+            generateSyntheticSitrep();
+            logMEL('VESSEL', `Cycle démo express : 3 navires + ${created} dossiers + 1 SITREP`);
+            toast(`Démo prête : 3 navires · ${created} dossiers · 1 SITREP`, 'ok');
+            save(); setTab('cop');
+          } }, '⚡ Reset + démo express (3 navires + 30 dossiers)'),
+          csvFileReset
+        )
+      )
+    ));
+
     // ===== Synthèses par axe (visibles en bas) =====
     if (state.vessels.length > 0) {
       const byKey = (key) => {
@@ -1436,8 +1505,8 @@
         el('div', { style: 'font-size:12px' },
           'Ouverts : ', badge(open.length, open.length ? 'red' : 'grey'), ' · ',
           'Clos : ', badge(closed.length, 'grey'), ' · ',
-          'Off-hire YTD : ', badge(Math.round(offhireYTD * 10) / 10 + ' h', 'orange'), ' · ',
-          'Off-hire estimé en cours : ', badge(offhireOpen + ' h', 'orange')),
+          'Off-hire YTD : ', badge(fmtH(offhireYTD), 'orange'), ' · ',
+          'Off-hire estimé en cours : ', badge(fmtH(offhireOpen), 'orange')),
         open.length === 0 ? null : el('div', { style: 'margin-top:6px' },
           ...open.map(i => el('div', { class: 'pb-step', style: 'cursor:pointer', onclick: () => incidentForm(i.id) },
             badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
@@ -3282,9 +3351,9 @@
       el('div', {},
         el('div', { class: 'grid-4' },
           kpiTile('Dossiers', matches.length, matches.length ? 'warn' : 'ok'),
-          kpiTile('Off-hire estimé (ouverts)', totalOpenOff + ' h', totalOpenOff ? 'warn' : 'ok'),
-          kpiTile('Off-hire réel (clos)', totalClosedOff + ' h', 'muted'),
-          kpiTile('Off-hire total', (totalOpenOff + totalClosedOff) + ' h', 'muted')
+          kpiTile('Off-hire estimé (ouverts)', fmtH(totalOpenOff), totalOpenOff ? 'warn' : 'ok'),
+          kpiTile('Off-hire réel (clos)', fmtH(totalClosedOff), 'muted'),
+          kpiTile('Off-hire total', fmtH(totalOpenOff + totalClosedOff), 'muted')
         ),
 
         el('div', { class: 'flex', style: 'margin:12px 0' },
@@ -3299,8 +3368,8 @@
               const v = vesselByName[i.vessel] || {};
               const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
               const off = i.status === 'closed'
-                ? (i.offhireActual != null ? i.offhireActual + ' h' : '⚠')
-                : ((i.offhireEstimated || 0) + ' h est.');
+                ? (i.offhireActual != null ? fmtH(i.offhireActual) : '⚠')
+                : (fmtH(i.offhireEstimated || 0) + ' est.');
               return [
                 el('span', { class: 'mono', style: 'cursor:pointer;text-decoration:underline',
                   onclick: () => incidentForm(i.id) }, i.ref || ''),
@@ -3329,7 +3398,7 @@
       const summary = (title, items, unit) => panel(title,
         items.length === 0 ? el('div', { class: 'empty' }, 'Néant.')
           : el('div', { class: 'flex', style: 'flex-wrap:wrap;gap:6px' },
-              ...items.slice(0, 15).map(([k, n]) => badge(k + ' · ' + n + (unit || ''), 'blue'))));
+              ...items.slice(0, 15).map(([k, n]) => badge(k + ' · ' + Math.round(n) + (unit || ''), 'blue'))));
       root.appendChild(el('div', { class: 'grid-2' },
         summary('Dossiers par flotte', byKey(fleetOf)),
         summary('Dossiers par ship manager', byKey(mgrOf))
