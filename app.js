@@ -144,6 +144,17 @@
     };
   }
 
+  // Purge complète des données métier — préserve le mot de passe et la
+  // configuration d'authentification. Démarre sur un état propre,
+  // sans navires ni contacts, prêt pour un nouvel import CSV.
+  function purgeAllData() {
+    const fresh = defaultState();
+    fresh.vessels = [];
+    fresh.stakeholders = [];
+    state = fresh;
+    save();
+  }
+
   // Migration automatique des données antérieures vers le schéma CMA Ships.
   function migrateState() {
     if (!state) return;
@@ -1351,6 +1362,52 @@
         )
       ));
     }
+
+    // ===== Purge totale + ré-import (cycle démo) =====
+    const csvFileReset = el('input', { type: 'file', accept: '.csv,text/csv', hidden: 'hidden' });
+    csvFileReset.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const rows = parseCSV(ev.target.result);
+          if (rows.length === 0) { toast('CSV vide ou format invalide', 'warn'); return; }
+          openImportPreview(rows);
+        } catch (err) { toast('Erreur parsing CSV : ' + err.message, 'danger'); }
+      };
+      reader.readAsText(f, 'utf-8');
+    });
+
+    root.appendChild(panel('Cycle démo — purge & rejeu',
+      el('div', {},
+        el('p', { class: 'muted' },
+          'Pour relancer une démo from scratch : purgez toutes les données métier (navires, dossiers, SITREPs, journal, actions, frictions, etc.) puis ré-importez le CSV avec génération de dossiers synthétiques. Le mot de passe et l\'authentification sont conservés.'),
+        el('div', { class: 'flex', style: 'gap:8px;flex-wrap:wrap;margin-top:10px' },
+          el('button', { class: 'btn-danger', onclick: () => {
+            const c = prompt('Cette action va EFFACER toutes les données métier (navires, dossiers, SITREPs, journal, actions, frictions, équipe, contacts…).\n\nLe mot de passe est conservé.\n\nTapez "PURGE" pour confirmer :');
+            if (c !== 'PURGE') return;
+            purgeAllData();
+            toast('Toutes les données métier effacées', 'ok');
+            setTab('vessels');
+          } }, '⟲ Purger toutes les données métier'),
+          el('button', { class: 'btn-primary', onclick: () => csvFileReset.click() }, '⬆ Ré-importer un CSV'),
+          el('button', { class: 'btn-ghost', onclick: () => {
+            if (!confirm('Cycle complet : purge + restauration des 3 navires CMA CGM par défaut + 30 dossiers synthétiques + 1 SITREP. Continuer ?')) return;
+            purgeAllData();
+            // Restaure les 3 navires CMA par défaut
+            state.vessels = defaultState().vessels;
+            state.stakeholders = defaultState().stakeholders;
+            const created = generateSyntheticDossiers(30);
+            generateSyntheticSitrep();
+            logMEL('VESSEL', `Cycle démo express : 3 navires + ${created} dossiers + 1 SITREP`);
+            toast(`Démo prête : 3 navires · ${created} dossiers · 1 SITREP`, 'ok');
+            save(); setTab('cop');
+          } }, '⚡ Reset + démo express (3 navires + 30 dossiers)'),
+          csvFileReset
+        )
+      )
+    ));
 
     // ===== Synthèses par axe (visibles en bas) =====
     if (state.vessels.length > 0) {
