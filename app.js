@@ -747,29 +747,24 @@
     const offhireByDept = (dept) => offhireSum(
       i => i.status !== 'closed' && (i.department || 'XX') === dept, 'offhireEstimated');
 
+    // Classification — répartition des dossiers ouverts (intégrée à la tile Dossiers)
+    const clsCount = {};
+    activeIncidents.forEach(i => { const k = i.classification || 'INTERNAL'; clsCount[k] = (clsCount[k] || 0) + 1; });
+    const clsSubtitle = el('div', { class: 'flex', style: 'gap:4px;flex-wrap:wrap;margin-top:4px' },
+      ...window.CLASSIFICATIONS.map(c => badge(c.short + ' ' + (clsCount[c.code] || 0), c.color))
+    );
+
     const kpis = el('div', { class: 'grid-4' },
       kpiTile('Mode', mode.statut,
         mode.code === 'crise' ? 'danger' : mode.code === 'vigilance' ? 'warn' : 'ok',
         mode.label),
-      kpiTile('Dossiers ouverts', activeIncidents.length, activeIncidents.length ? 'warn' : 'ok'),
+      kpiTile('Dossiers ouverts', activeIncidents.length,
+        activeIncidents.length ? 'warn' : 'ok', clsSubtitle),
       kpiTile('Frictions actives', frActives, frActives ? 'warn' : 'ok'),
-      kpiTile('Actions en retard', overdue, overdue ? 'danger' : (openActions ? 'warn' : 'ok'), `${openActions} ouvertes`)
+      kpiTile('Actions en retard', overdue, overdue ? 'danger' : (openActions ? 'warn' : 'ok'),
+        openActions + ' ouvertes')
     );
     root.appendChild(kpis);
-
-    // Classification — répartition des dossiers ouverts
-    const clsCount = {};
-    activeIncidents.forEach(i => { const k = i.classification || 'INTERNAL'; clsCount[k] = (clsCount[k] || 0) + 1; });
-    root.appendChild(panel('Classification des dossiers ouverts',
-      el('div', { class: 'flex', style: 'gap:10px;flex-wrap:wrap' },
-        ...window.CLASSIFICATIONS.map(c => {
-          const n = clsCount[c.code] || 0;
-          return el('div', { style: 'padding:8px 12px;border:1px solid var(--border);border-radius:6px;min-width:140px' },
-            el('div', {}, badge(c.short, c.color), ' ', el('span', { class: 'muted', style: 'font-size:11px' }, c.label)),
-            el('div', { style: 'font-size:22px;font-weight:700;margin-top:4px' }, n));
-        })
-      )
-    ));
 
     // Off-hire — panel dédié : 4 KPIs (En cours · Semaine · YTD · vs Objectif)
     const offM = computeOffhireMetrics();
@@ -857,19 +852,78 @@
   // ============================================================
   //   INCIDENTS
   // ============================================================
+  // Filtres persistants pour le tableau Dossiers
+  const dossierFilters = {
+    search: '', dept: '', type: '', severity: '', classification: '', status: '', vessel: ''
+  };
+
   renderers.incidents = (root) => {
+    // Listes distinctes pour les filtres
+    const uniq = (arr) => [...new Set(arr.filter(Boolean))].sort();
+    const types = uniq(state.incidents.map(i => i.type));
+
+    // Filtres
+    const fSearch = (() => { const i = el('input', { placeholder: 'Réf / synthèse / description / navire', value: dossierFilters.search });
+      i.addEventListener('input', () => { dossierFilters.search = i.value; setTab('incidents'); }); return i; })();
+    const fDept = (() => { const s = el('select', {}, el('option', { value: '' }, 'Tous départements'),
+        ...['FM','CR','FU','XX'].map(c => el('option', { value: c, selected: dossierFilters.dept === c }, c)));
+      s.addEventListener('change', () => { dossierFilters.dept = s.value; setTab('incidents'); }); return s; })();
+    const fType = (() => { const s = el('select', {}, el('option', { value: '' }, 'Tous types'),
+        ...types.map(t => el('option', { value: t, selected: dossierFilters.type === t }, t)));
+      s.addEventListener('change', () => { dossierFilters.type = s.value; setTab('incidents'); }); return s; })();
+    const fSev = (() => { const s = el('select', {}, el('option', { value: '' }, 'Toutes sévérités'),
+        ...['crit','high','med','low'].map(c => el('option', { value: c, selected: dossierFilters.severity === c }, c.toUpperCase())));
+      s.addEventListener('change', () => { dossierFilters.severity = s.value; setTab('incidents'); }); return s; })();
+    const fCls = (() => { const s = el('select', {}, el('option', { value: '' }, 'Toutes classifications'),
+        ...window.CLASSIFICATIONS.map(c => el('option', { value: c.code, selected: dossierFilters.classification === c.code }, c.label)));
+      s.addEventListener('change', () => { dossierFilters.classification = s.value; setTab('incidents'); }); return s; })();
+    const fStatus = (() => { const s = el('select', {}, el('option', { value: '' }, 'Tous statuts'),
+        ...['open','monitoring','closed'].map(st => el('option', { value: st, selected: dossierFilters.status === st }, st)));
+      s.addEventListener('change', () => { dossierFilters.status = s.value; setTab('incidents'); }); return s; })();
+    const fReset = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+      Object.keys(dossierFilters).forEach(k => dossierFilters[k] = '');
+      setTab('incidents');
+    } }, '✕ Réinit. filtres');
+
+    // Application des filtres
+    const q = (dossierFilters.search || '').toLowerCase().trim();
+    const filtered = state.incidents.filter(i => {
+      if (dossierFilters.dept && (i.department || 'XX') !== dossierFilters.dept) return false;
+      if (dossierFilters.type && i.type !== dossierFilters.type) return false;
+      if (dossierFilters.severity && i.severity !== dossierFilters.severity) return false;
+      if (dossierFilters.classification && (i.classification || 'INTERNAL') !== dossierFilters.classification) return false;
+      if (dossierFilters.status && i.status !== dossierFilters.status) return false;
+      if (q) {
+        const hay = ((i.ref || '') + ' ' + (i.vessel || '') + ' ' + (i.sitrepLine || '') + ' ' + (i.summary || '')).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
     root.appendChild(panel('Dossiers techniques & équipages',
       el('div', {},
         el('p', { class: 'muted' }, 'Suivi des dossiers ouverts — propriétaire : le Duty Officer de chaque département (FM, CR, FU) pour son scope ; le Duty Manager pour les sujets transverses. Hors périmètre SSE (couvert par l\'outil dédié).'),
-        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, `${state.incidents.length} total — ${state.incidents.filter(i => i.status !== 'closed').length} ouvert(s)`),
+        el('div', { class: 'flex-between', style: 'margin-bottom:8px' },
+          el('div', { class: 'muted' }, `${filtered.length} / ${state.incidents.length} dossier(s) affiché(s)`),
           el('button', { class: 'btn-primary', onclick: () => incidentForm() }, '+ Nouveau dossier (i)')
         ),
-        state.incidents.length === 0
-          ? el('div', { class: 'empty' }, 'Aucun dossier ouvert.')
+        // Bandeau filtres (2 lignes)
+        el('div', { class: 'form-row cols-4', style: 'margin-bottom:6px' },
+          el('div', {}, el('label', {}, 'Recherche'), fSearch),
+          el('div', {}, el('label', {}, 'Département'), fDept),
+          el('div', {}, el('label', {}, 'Type'), fType),
+          el('div', {}, el('label', {}, 'Sévérité'), fSev)
+        ),
+        el('div', { class: 'form-row cols-3', style: 'margin-bottom:10px' },
+          el('div', {}, el('label', {}, 'Classification'), fCls),
+          el('div', {}, el('label', {}, 'Statut'), fStatus),
+          el('div', { style: 'align-self:end' }, fReset)
+        ),
+        filtered.length === 0
+          ? el('div', { class: 'empty' }, state.incidents.length === 0 ? 'Aucun dossier.' : 'Aucun dossier ne correspond aux filtres.')
           : tableEl(
-            ['Réf', 'Dépt', 'Type', 'Navire', 'Sév.', 'Class.', 'Off-hire (h)', 'Démarré', 'Statut', ''],
-            state.incidents.map(i => {
+            ['SITREP', 'Réf', 'Dépt', 'Type', 'Navire', 'Sév.', 'Class.', 'Off-hire (h)', 'Démarré', 'Statut', ''],
+            filtered.map(i => {
               const isClosed = i.status === 'closed';
               const value = isClosed
                 ? (i.offhireActual != null ? fmtH(i.offhireActual) : '⚠ non chiffré')
@@ -878,7 +932,15 @@
                 ? (i.offhireActual == null ? 'red' : 'grey')
                 : ((i.offhireEstimated || 0) > 72 ? 'orange' : 'blue');
               const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+              const include = i.includeInSitrep !== false;
+              const cb = el('input', { type: 'checkbox' });
+              cb.checked = include;
+              cb.addEventListener('change', () => {
+                i.includeInSitrep = cb.checked;
+                save();
+              });
               return [
+                cb,
                 el('span', { class: 'mono' }, i.ref || ''),
                 badge(i.department || 'XX', 'blue'),
                 i.type || '',
@@ -963,6 +1025,8 @@
       value: inc.offhireEstimated != null ? inc.offhireEstimated : 0,
       placeholder: 'Heures estimées'
     });
+    const includeInSitrep = el('input', { type: 'checkbox' });
+    includeInSitrep.checked = inc.includeInSitrep !== false;
     const offhireAct = el('input', {
       type: 'number', min: 0, step: 0.5,
       value: inc.offhireActual != null ? inc.offhireActual : '',
@@ -1007,7 +1071,8 @@
         sitrepLine: sitrepLine.value || `${vessel.value || 'n/a'} — ${type.value}` + (summary.value ? ' : ' + summary.value.split('\n')[0].slice(0, 120) : ''),
         classification: classification.value,
         offhireEstimated: parseFloat(offhireEst.value) || 0,
-        offhireActual: offhireAct.value === '' ? null : parseFloat(offhireAct.value)
+        offhireActual: offhireAct.value === '' ? null : parseFloat(offhireAct.value),
+        includeInSitrep: includeInSitrep.checked
       };
       if (data.status === 'closed' && !data.closedAt) data.closedAt = nowISO();
       if (idEdit) {
@@ -1039,6 +1104,8 @@
       field('Statut', status),
       field('Date début', startedAt),
       field('Synthèse une ligne (apparaît dans le SITREP du DO)', sitrepLine),
+      el('label', { class: 'flex', style: 'gap:6px;align-items:center;margin:6px 0' },
+        includeInSitrep, el('span', {}, 'Inclure ce dossier dans les SITREP (décocher pour omettre)')),
       field('Description détaillée', summary),
       el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Off-hire'),
       twoCol('Off-hire estimé (heures)', offhireEst, 'Off-hire réel (clôture — OBLIGATOIRE)', offhireAct),
@@ -2549,7 +2616,7 @@
     // Dossiers du jour : auto depuis l'onglet Dossiers, triés par sévérité.
     const sevOrderDo = { crit: 0, high: 1, med: 2, low: 3 };
     const openDossiers = state.incidents
-      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept)
+      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept && i.includeInSitrep !== false)
       .slice()
       .sort((a, b) => (sevOrderDo[a.severity] ?? 9) - (sevOrderDo[b.severity] ?? 9));
 
@@ -2685,6 +2752,75 @@
         el('div', { class: 'flex', style: 'margin-top:10px' }, buildBtn, printBtn, dlBtn)
       )
     ));
+
+    // ===== Sélection des dossiers à inclure dans le SITREP =====
+    const allOpen = state.incidents.filter(i => i.status !== 'closed');
+    if (allOpen.length > 0) {
+      const byDept = { FM: [], CR: [], FU: [], XX: [] };
+      allOpen.forEach(i => { (byDept[i.department || 'XX'] || byDept.XX).push(i); });
+      const sevOrderS = { crit: 0, high: 1, med: 2, low: 3 };
+      Object.keys(byDept).forEach(d => byDept[d].sort((a, b) => (sevOrderS[a.severity] ?? 9) - (sevOrderS[b.severity] ?? 9)));
+      const includedCount = allOpen.filter(i => i.includeInSitrep !== false).length;
+
+      const allCb = el('input', { type: 'checkbox' });
+      allCb.checked = includedCount === allOpen.length;
+      allCb.indeterminate = includedCount > 0 && includedCount < allOpen.length;
+      allCb.addEventListener('change', () => {
+        allOpen.forEach(i => i.includeInSitrep = allCb.checked);
+        save(); setTab('sitrep');
+      });
+
+      const renderDeptBlock = (dept, list) => {
+        if (list.length === 0) return null;
+        return el('div', { style: 'margin-bottom:10px' },
+          el('div', { style: 'font-weight:600;color:var(--accent-2);margin-bottom:4px' },
+            dept + ' — ' + list.length + ' dossier(s)'),
+          ...list.map(i => {
+            const include = i.includeInSitrep !== false;
+            const cb = el('input', { type: 'checkbox' });
+            cb.checked = include;
+            cb.addEventListener('change', () => {
+              i.includeInSitrep = cb.checked;
+              save(); setTab('sitrep');
+            });
+            const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+            return el('label', { class: 'flex', style: 'gap:6px;align-items:center;padding:3px 0;cursor:pointer' },
+              cb,
+              badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+              badge(cls.short, cls.color),
+              el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref),
+              el('span', {}, (i.vessel || 'n/a') + ' — ' + (i.sitrepLine || i.type || '')));
+          }));
+      };
+
+      root.appendChild(panel('Sélection des dossiers à inclure dans le SITREP',
+        el('div', {},
+          el('p', { class: 'muted' },
+            'Cochez/décochez chaque dossier selon son importance pour le SITREP. ' +
+            includedCount + ' / ' + allOpen.length + ' dossier(s) actuellement inclus.'),
+          el('label', { class: 'flex', style: 'gap:6px;align-items:center;margin-bottom:8px;padding:4px;background:rgba(255,255,255,.05);border-radius:4px' },
+            allCb, el('span', {}, el('strong', {}, 'Tout cocher / décocher'))),
+          el('div', { class: 'flex', style: 'gap:6px;margin-bottom:10px;flex-wrap:wrap' },
+            el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+              allOpen.forEach(i => i.includeInSitrep = (['crit','high'].includes(i.severity)));
+              save(); setTab('sitrep');
+            } }, '⚡ Sélection CRIT + HIGH seulement'),
+            el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+              allOpen.forEach(i => i.includeInSitrep = (i.classification && i.classification !== 'PUBLIC'));
+              save(); setTab('sitrep');
+            } }, '🔒 Exclure PUBLIC'),
+            el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+              allOpen.forEach(i => i.includeInSitrep = true);
+              save(); setTab('sitrep');
+            } }, '✓ Tout inclure')
+          ),
+          renderDeptBlock('FM', byDept.FM),
+          renderDeptBlock('CR', byDept.CR),
+          renderDeptBlock('FU', byDept.FU),
+          renderDeptBlock('XX', byDept.XX)
+        )
+      ));
+    }
 
     // ===== Frictions (DM) — gestion inline =====
     const fopen = (state.frictions || []).filter(f => f.status !== 'closed');
@@ -2832,7 +2968,7 @@
       return c ? c.short : 'INT';
     };
     const dossiersFor = (dept) => state.incidents
-      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept)
+      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept && i.includeInSitrep !== false)
       .slice()
       .sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9))
       .map(i => {
