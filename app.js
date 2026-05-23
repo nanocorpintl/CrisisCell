@@ -1314,6 +1314,44 @@
       )
     ));
 
+    // ===== Générateur de dossiers synthétiques (démo / test) =====
+    if (state.vessels.length > 0) {
+      const synSlider = el('input', { type: 'range', min: 1, max: 200, value: 20, style: 'flex:1' });
+      const synOut = el('output', { style: 'min-width:42px;text-align:right;font-family:var(--mono);font-weight:600' }, '20');
+      synSlider.addEventListener('input', () => synOut.value = synSlider.value);
+      root.appendChild(panel('Données synthétiques (démo / test)',
+        el('div', {},
+          el('p', { class: 'muted' },
+            'Génère N dossiers réalistes (M/E, A/E, Drydock, PSC, Manning, Vetting, MEDEVAC…) répartis aléatoirement sur les ' + state.vessels.length + ' navire(s) du registre. Off-hire estimé/réel, sévérités et classifications calibrés. Utile pour démos et tests des dashboards.'),
+          el('div', { class: 'flex', style: 'gap:10px;align-items:center;margin:10px 0' },
+            el('span', { class: 'muted', style: 'min-width:90px' }, 'Nb dossiers :'),
+            synSlider, synOut),
+          el('div', { class: 'flex', style: 'gap:8px;flex-wrap:wrap' },
+            el('button', { class: 'btn-primary', onclick: () => {
+              const n = parseInt(synSlider.value, 10) || 0;
+              const created = generateSyntheticDossiers(n);
+              toast(`${created} dossiers synthétiques créés`, 'ok');
+              logMEL('VESSEL', `${created} dossiers synthétiques générés (démo)`);
+              save(); setTab('vessels');
+            } }, '+ Générer ' + 'N dossiers'),
+            el('button', { class: 'btn-ghost', onclick: () => {
+              generateSyntheticSitrep();
+              toast('SITREP CMA exemple généré', 'ok');
+              save(); setTab('sitrep');
+            } }, '+ Générer 1 SITREP exemple'),
+            el('button', { class: 'btn-danger btn-sm', onclick: () => {
+              if (!confirm('Supprimer TOUS les dossiers synthétiques (préfixe SYN-) ?')) return;
+              const before = state.incidents.length;
+              state.incidents = state.incidents.filter(i => !(i.ref || '').startsWith('SYN-'));
+              const removed = before - state.incidents.length;
+              toast(`${removed} dossiers synthétiques supprimés`, 'ok');
+              save(); setTab('vessels');
+            } }, '✕ Purger les dossiers synthétiques')
+          )
+        )
+      ));
+    }
+
     // ===== Synthèses par axe (visibles en bas) =====
     if (state.vessels.length > 0) {
       const byKey = (key) => {
@@ -1413,6 +1451,175 @@
       ));
   }
 
+  // ============================================================
+  //   GÉNÉRATEUR DE DOSSIERS SYNTHÉTIQUES (test / démo)
+  // ============================================================
+  const SYNTH_TEMPLATES = {
+    'M/E': [
+      { off: 96, sev: 'high', line: 'Crack on ME starting air manifold, repair shore team SGP {D}/06' },
+      { off: 72, sev: 'high', line: 'M/E stay bolt cyl {N} broken, speed limited to {S} kts' },
+      { off: 48, sev: 'med',  line: 'M/E exhaust valve cyl {N} damaged, replacement next port' },
+      { off: 24, sev: 'med',  line: 'M/E fuel rack stuck cyl {N}, isolated, vitesse réduite {S} kts' },
+      { off:  6, sev: 'low',  line: 'M/E lube oil temperature alarm, sensor checked, normal' }
+    ],
+    'A/E': [
+      { off: 24, sev: 'high', line: 'A/E#{N} OOO suite alarme HIMAP, reefer limit {R} units' },
+      { off: 48, sev: 'high', line: 'A/E#{N} turbocharger surge, isolated, opération {K} DG' },
+      { off: 12, sev: 'med',  line: 'A/E#{N} lube oil pressure low, capteur remplacé' },
+      { off:  4, sev: 'low',  line: 'A/E#{N} water leak repaired, back online' }
+    ],
+    'Propulsion': [
+      { off: 168, sev: 'crit', line: 'CPP hub failure, intervention chantier {C}, +12j planning' },
+      { off:  72, sev: 'high', line: 'Ligne d\'arbre vibration anormale, monitoring renforcé, vitesse {S} kts' },
+      { off:  24, sev: 'med',  line: 'Gouvernail capteur défaillant, mode manuel, repair next call' }
+    ],
+    'Drydock': [
+      { off: 240, sev: 'high', line: 'Drydock Cosco Zhoushan ETA {D}/06, durée prévue {N}j' },
+      { off: 168, sev: 'high', line: 'Drydock unplanned suite avarie hélice, Cosco Shanghai' }
+    ],
+    'Retrofit': [
+      { off: 120, sev: 'med',  line: 'Retrofit LNG en cours Cosco Zhoushan, ETD revisée +{N}j' },
+      { off:   0, sev: 'low',  line: 'Phase-in prévu {D}/06, sea trial OK, équipage à bord' },
+      { off:  48, sev: 'med',  line: 'Bush manufacturing Espagne, dispo {D}/06, ETD +{N}j' }
+    ],
+    'PSC': [
+      { off: 48, sev: 'high', line: 'Détention PSC port {P}, {N} déficiences, plan correctif J+{D}' },
+      { off: 24, sev: 'med',  line: 'PSC inspection {P}, {N} déficiences mineures à corriger sous {D}j' },
+      { off:  0, sev: 'low',  line: 'PSC inspection {P} sans déficience, rapport archivé' }
+    ],
+    'Vetting': [
+      { off: 0, sev: 'high', line: 'Vetting {O} échoué, {N} observations dont 1 high-risk, re-vetting {D}/06' },
+      { off: 0, sev: 'med',  line: 'Pré-inspection vetting {O} prévue {P} le {D}/06' },
+      { off: 0, sev: 'low',  line: 'Vetting {O} passé, {N} observations mineures' }
+    ],
+    'Bunker': [
+      { off: 24, sev: 'med', line: 'Bunker off-spec {P}, échantillon analyse Veritas, LOP fournisseur' },
+      { off: 12, sev: 'low', line: 'Soutage retardé {P}, ETD +{N}h, lead time supplier' },
+      { off:  6, sev: 'low', line: 'LNG bunkering {P} {D}/06, pressure test OK' }
+    ],
+    'Cargaison': [
+      { off:  0, sev: 'med', line: 'Cargo damage container CMAU{N}, LOP au chargeur' },
+      { off: 24, sev: 'high', line: 'Reefer alarm {N} containers, chaîne thermique préservée' },
+      { off:  0, sev: 'low',  line: 'Contact gantry crane berthing {P}, dommage mineur, LOP' }
+    ],
+    'Manning': [
+      { off:  0, sev: 'med', line: 'Relève {N} marins à {P} J+{D}, agent Manille confirmé' },
+      { off: 24, sev: 'high', line: 'Gap officier 2/O confirmé prochaine rotation, prolongation contrat' },
+      { off:  0, sev: 'low', line: 'Audit POEA {P} J+{D}, préparation Crewing en cours' },
+      { off:  0, sev: 'med', line: 'Visa Schengen relève capitaine en cours, plan B activé' }
+    ],
+    'MEDEVAC': [
+      { off:  0, sev: 'high', line: 'MEDEVAC effectué {P}, état stabilisé, remplaçant à bord' },
+      { off: 12, sev: 'high', line: 'Évacuation médicale en cours, hélico SAR vers hôpital {P}' }
+    ],
+    'Certification': [
+      { off: 0, sev: 'med', line: 'Cert STCW Advanced Firefighting expire J+{D}, formation BV {P}' },
+      { off: 0, sev: 'low', line: 'Session CII formation {N} chief engineers Hambourg J+{D}' }
+    ],
+    'Régulation': [
+      { off: 24, sev: 'med', line: 'Conf call DGAMPA implementation FuelEU J+{D}' },
+      { off:  0, sev: 'low', line: 'MARPOL annex VI inspection passée sans réserve' }
+    ]
+  };
+
+  const SYNTH_PORTS = ['Singapore','Rotterdam','Le Havre','Hamburg','Shanghai','Long Beach','Khalifa','Algeciras','Tangier','Antwerp','Hong Kong','Manille'];
+  const SYNTH_OIL_MAJORS = ['Shell','BP','Exxon','Total','Chevron'];
+  const SYNTH_YARDS = ['Cosco Zhoushan','Cosco Shanghai','Seatrium','Hyundai Mipo'];
+
+  const DEPT_BY_TYPE = {
+    'M/E': 'FM', 'A/E': 'FM', 'Propulsion': 'FM', 'PSC': 'FM',
+    'Vetting': 'FM', 'Bunker': 'FM', 'Cargaison': 'FM', 'Régulation': 'FM',
+    'Manning': 'CR', 'MEDEVAC': 'CR', 'Certification': 'CR',
+    'Drydock': 'FU', 'Retrofit': 'FU'
+  };
+
+  function pickRand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function rint(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function jitter(v, pct) {
+    if (!v) return v;
+    const d = v * pct;
+    return Math.max(0, Math.round((v + (Math.random() * 2 - 1) * d) * 10) / 10);
+  }
+  function substituteTemplate(s) {
+    return s.replace(/\{N\}/g, () => rint(1, 12))
+            .replace(/\{S\}/g, () => rint(10, 18))
+            .replace(/\{R\}/g, () => rint(40, 120))
+            .replace(/\{K\}/g, () => rint(2, 3))
+            .replace(/\{C\}/g, () => pickRand(SYNTH_YARDS))
+            .replace(/\{D\}/g, () => rint(1, 28))
+            .replace(/\{P\}/g, () => pickRand(SYNTH_PORTS))
+            .replace(/\{O\}/g, () => pickRand(SYNTH_OIL_MAJORS));
+  }
+
+  function generateSyntheticDossiers(count) {
+    if (state.vessels.length === 0) {
+      toast('Aucun navire au registre. Importez d\'abord un CSV.', 'warn');
+      return 0;
+    }
+    const types = Object.keys(SYNTH_TEMPLATES);
+    const classifs = [
+      'INTERNAL','INTERNAL','INTERNAL','INTERNAL','INTERNAL','INTERNAL','INTERNAL',
+      'RESTRICTED','RESTRICTED',
+      'CONFIDENTIAL'
+    ];
+    let created = 0;
+    const now = Date.now();
+    for (let i = 0; i < count; i++) {
+      const vessel = pickRand(state.vessels);
+      const type = pickRand(types);
+      const tpl = pickRand(SYNTH_TEMPLATES[type]);
+      const sev = tpl.sev;
+      const cls = pickRand(classifs);
+      const dept = DEPT_BY_TYPE[type] || 'FM';
+      const ageDays = rint(0, 60);
+      const startedAt = new Date(now - ageDays * 24 * 3600 * 1000).toISOString();
+      const r = Math.random();
+      let status, closedAt = null, offhireActual = null, offhireEstimated = 0;
+      if (r < 0.5) {
+        status = 'open';
+        offhireEstimated = jitter(tpl.off, 0.4);
+      } else if (r < 0.75) {
+        status = 'monitoring';
+        offhireEstimated = jitter(tpl.off, 0.3);
+      } else {
+        status = 'closed';
+        const closeDelay = rint(1, Math.max(1, ageDays));
+        let ct = new Date(new Date(startedAt).getTime() + closeDelay * 24 * 3600 * 1000);
+        if (ct > new Date()) ct = new Date();
+        closedAt = ct.toISOString();
+        offhireActual = jitter(tpl.off, 0.5);
+      }
+      const sitrepLine = substituteTemplate(tpl.line);
+      state.incidents.push({
+        id: id(),
+        ref: 'SYN-' + Math.random().toString(36).slice(2, 8).toUpperCase(),
+        type, vessel: vessel.name,
+        department: dept,
+        severity: sev, status,
+        classification: cls,
+        startedAt, closedAt,
+        summary: '[Synthétique] ' + sitrepLine,
+        sitrepLine,
+        offhireEstimated: offhireEstimated || 0,
+        offhireActual: offhireActual
+      });
+      created++;
+    }
+    return created;
+  }
+
+  function generateSyntheticSitrep() {
+    if (!state.dutyManager) state.dutyManager = currentUserName() || 'M. Lefèvre';
+    if (!state.dutyOfficers.FM) state.dutyOfficers.FM = 'S. Tan';
+    if (!state.dutyOfficers.CR) state.dutyOfficers.CR = 'P. Lim';
+    if (!state.dutyOfficers.FU) state.dutyOfficers.FU = 'K. Wong';
+    state.sitrepCounter = (state.sitrepCounter || 0) + 1;
+    const today = new Date();
+    state.weekNumber = state.weekNumber || isoWeekNumber(today);
+    const text = renderCMASitrep('Activité opérationnelle nominale sur la flotte. Quelques dossiers techniques sous surveillance FM, relèves Crewing en cours, chantiers FU dans le planning.');
+    state.sitreps.unshift({ id: id(), ts: nowISO(), num: state.sitrepCounter, text });
+  }
+
   function openImportPreview(rows) {
     const sample = rows.slice(0, 5);
     const fleets = [...new Set(rows.map(r => r.Fleet).filter(Boolean))];
@@ -1431,14 +1638,36 @@
           tableEl(['VesselName', 'IMO', 'Fleet', 'Ship Manager', 'Fuel type', 'M/E type'],
             sample.map(r => [r.VesselName || '—', r.IMO || '—', r.Fleet || '—',
               r['Ship Manager'] || '—', r['Fuel type'] || '—', r['M/E type'] || '—']))),
-        el('div', { class: 'flex', style: 'margin-top:14px' },
-          el('button', { class: 'btn-primary', onclick: () => {
-            const stats = mergeImportedVessels(rows);
-            logMEL('VESSEL', `Import CSV : ${stats.added} ajoutés · ${stats.updated} mis à jour · ${stats.skipped} ignorés (total ${stats.total})`);
-            toast(`Import : ${stats.added} ajoutés · ${stats.updated} mis à jour`, 'ok');
-            save(); closeModal(); setTab('vessels');
-          } }, '✓ Importer ' + rows.length + ' navires'),
-          el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler'))
+        (() => {
+          const seedCb = el('input', { type: 'checkbox' }); seedCb.checked = true;
+          const slider = el('input', { type: 'range', min: 0, max: 100, value: 25, style: 'flex:1' });
+          const out = el('output', { style: 'min-width:36px;text-align:right;font-family:var(--mono)' }, '25');
+          slider.addEventListener('input', () => out.value = slider.value);
+          return el('div', { style: 'margin-top:14px;padding:10px;background:rgba(58,160,255,.08);border-radius:6px' },
+            el('label', { class: 'flex', style: 'cursor:pointer;margin-bottom:8px' },
+              seedCb, el('span', { style: 'margin-left:8px' },
+                el('strong', {}, 'Générer des données synthétiques (démo / test)'),
+                el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:2px' },
+                  'Dossiers réalistes (M/E, A/E, Drydock, PSC, Manning…) répartis sur les navires importés. Inclut aussi un SITREP CMA exemple.'))),
+            el('div', { class: 'flex', style: 'gap:10px;align-items:center' },
+              el('span', { class: 'muted', style: 'font-size:12px;min-width:90px' }, 'Nb dossiers :'),
+              slider, out),
+            el('div', { class: 'flex', style: 'margin-top:14px' },
+              el('button', { class: 'btn-primary', onclick: () => {
+                const stats = mergeImportedVessels(rows);
+                let extra = '';
+                if (seedCb.checked) {
+                  const n = parseInt(slider.value, 10) || 0;
+                  const created = generateSyntheticDossiers(n);
+                  generateSyntheticSitrep();
+                  extra = ` · ${created} dossiers synthétiques + 1 SITREP exemple`;
+                }
+                logMEL('VESSEL', `Import CSV : ${stats.added} ajoutés · ${stats.updated} mis à jour · ${stats.skipped} ignorés (total ${stats.total})${extra}`);
+                toast(`Import : ${stats.added} ajoutés · ${stats.updated} mis à jour${extra}`, 'ok');
+                save(); closeModal(); setTab('vessels');
+              } }, '✓ Importer ' + rows.length + ' navires'),
+              el('button', { class: 'btn-ghost', onclick: closeModal }, 'Annuler')));
+        })()
       ));
   }
 
