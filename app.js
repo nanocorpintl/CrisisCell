@@ -581,6 +581,7 @@
         p: 'passation', s: 'sitrep', l: 'playbooks',
         x: 'retex', z: 'exercises',
         w: 'veille', q: 'triggers', f: 'notif',
+        y: 'analyse',
         '1': 'dosit-fm', '2': 'dosit-cr', '3': 'dosit-fu'
       };
       const target = map[e.key.toLowerCase()];
@@ -882,24 +883,26 @@
       vesselInfo.innerHTML = '';
       // 1. match exact par nom dans le registre
       let v = state.vessels.find(x => x.name === vessel.value);
-      // 2. sinon détection dans le texte
+      // 2. sinon détection dans la valeur du champ navire
       if (!v && vessel.value) v = findVesselInText(vessel.value);
+      // 3. sinon, si le champ est vide, on tente la synthèse une-ligne puis la description
+      let autoFromText = false;
+      if (!v && (!vessel.value || !vessel.value.trim())) {
+        const fromLine = sitrepLine && findVesselInText(sitrepLine.value || '');
+        const fromSummary = !fromLine && summary && findVesselInText(summary.value || '');
+        v = fromLine || fromSummary;
+        if (v) autoFromText = true;
+      }
       if (v) {
-        // Si détecté par texte libre, normaliser le champ au nom canonique
-        if (vessel.value !== v.name) {
-          vessel.value = v.name;
-        }
+        if (vessel.value !== v.name) vessel.value = v.name;
         vesselInfo.appendChild(el('span', {},
-          '✓ ', el('strong', {}, v.name),
+          (autoFromText ? '✓ détecté depuis le texte : ' : '✓ '),
+          el('strong', {}, v.name),
           v.imo ? ' · IMO ' + v.imo : '',
           v.fleet ? ' · ' : '', v.fleet ? badge(v.fleet, 'blue') : '',
           ' · ', v.shipManager || '—',
           ' · ', badge(v.fuelType || v.fuelMode || '—', 'grey'),
           ' · ', (v.numDG || '?') + ' DG'));
-        // Auto-rattachement département si pas encore défini
-        if (!inc.id && department && department.value === 'FM' && v.fleet && v.fleet.match(/^[MS]/i)) {
-          // Heuristique : on garde FM par défaut, l'utilisateur peut changer
-        }
       } else if (vessel.value) {
         vesselInfo.appendChild(el('span', { style: 'color:var(--warn)' },
           '⚠ Aucun navire détecté pour "' + vessel.value + '". Vérifiez l\'orthographe ou ajoutez-le au registre.'));
@@ -918,6 +921,11 @@
       placeholder: 'Synthèse en UNE LIGNE qui apparaîtra dans le SITREP du DO',
       value: inc.sitrepLine || ''
     });
+    // Détection auto navire depuis la synthèse ou la description si champ navire vide
+    sitrepLine.addEventListener('input', refreshVesselInfo);
+    sitrepLine.addEventListener('blur',  refreshVesselInfo);
+    summary.addEventListener('input', refreshVesselInfo);
+    summary.addEventListener('blur',  refreshVesselInfo);
     const offhireEst = el('input', {
       type: 'number', min: 0, step: 0.5,
       value: inc.offhireEstimated != null ? inc.offhireEstimated : 0,
@@ -946,6 +954,14 @@
           offhireAct.focus();
           toast('À la clôture, le chiffrage EXACT du off-hire (en heures) est obligatoire.', 'danger');
           return;
+        }
+      }
+      // Tentative ultime de détection du navire si le champ est vide
+      if (!vessel.value || !vessel.value.trim()) {
+        const detected = findVesselInText(sitrepLine.value || '') || findVesselInText(summary.value || '');
+        if (detected) {
+          vessel.value = detected.name;
+          toast('Navire détecté automatiquement : ' + detected.name, 'ok');
         }
       }
       const data = {
@@ -2879,6 +2895,239 @@
   // ============================================================
   //   VEILLE — MOC (Maritime Operations Center)
   // ============================================================
+  // ============================================================
+  //   ANALYSE — requêtes croisées sur dossiers (multi-axes)
+  // ============================================================
+  const analyseFilters = {
+    from: '', to: '',
+    vessel: '', fleet: '', shipManager: '', fuelType: '',
+    dept: '', type: '', severity: '', classification: '', status: '',
+    text: ''
+  };
+
+  renderers.analyse = (root) => {
+    // Index navire pour enrichissement
+    const vesselByName = {};
+    state.vessels.forEach(v => { vesselByName[v.name] = v; });
+
+    // Préparer les options de filtres distinctes (à partir des données)
+    const uniq = (arr) => [...new Set(arr.filter(Boolean))].sort();
+    const allTypes = uniq(state.incidents.map(i => i.type));
+    const allDepts = ['FM','CR','FU','XX'];
+    const allSev = ['crit','high','med','low'];
+    const allCls = ['CONFIDENTIAL','RESTRICTED','INTERNAL','PUBLIC'];
+    const allStatus = ['open','monitoring','closed'];
+    const allFleets = uniq(state.vessels.map(v => v.fleet));
+    const allManagers = uniq(state.vessels.map(v => v.shipManager));
+    const allFuels = uniq(state.vessels.map(v => v.fuelType || v.fuelMode));
+
+    // ===== Bandeau filtres =====
+    const filterInput = (key, placeholder) => {
+      const i = el('input', { value: analyseFilters[key] || '', placeholder });
+      i.addEventListener('input', () => { analyseFilters[key] = i.value; setTab('analyse'); });
+      return i;
+    };
+    const filterDate = (key) => {
+      const i = el('input', { type: 'date', value: analyseFilters[key] || '' });
+      i.addEventListener('change', () => { analyseFilters[key] = i.value; setTab('analyse'); });
+      return i;
+    };
+    const filterSelect = (key, options, label) => {
+      const s = el('select', {}, el('option', { value: '' }, label),
+        ...options.map(o => el('option', { value: o, selected: analyseFilters[key] === o }, o)));
+      s.addEventListener('change', () => { analyseFilters[key] = s.value; setTab('analyse'); });
+      return s;
+    };
+    const resetBtn = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+      Object.keys(analyseFilters).forEach(k => analyseFilters[k] = '');
+      setTab('analyse');
+    } }, '✕ Réinitialiser');
+
+    root.appendChild(panel('Analyse — requêtes croisées sur les dossiers',
+      el('div', {},
+        el('p', { class: 'muted' },
+          'Filtrez les dossiers (ouverts + clos) selon les axes disponibles. Tous les filtres se combinent. Recherche libre dans la synthèse et la description.'),
+        el('h4', { style: 'margin:8px 0 4px;color:var(--accent-2)' }, 'Période'),
+        el('div', { class: 'form-row cols-3' },
+          el('div', {}, el('label', {}, 'Du'), filterDate('from')),
+          el('div', {}, el('label', {}, 'Au'), filterDate('to')),
+          el('div', {}, el('label', {}, 'Recherche libre'), filterInput('text', 'mot dans synthèse/description'))),
+
+        el('h4', { style: 'margin:14px 0 4px;color:var(--accent-2)' }, 'Axes navire'),
+        el('div', { class: 'form-row cols-4' },
+          el('div', {}, el('label', {}, 'Navire'), filterInput('vessel', 'nom partiel ou IMO')),
+          el('div', {}, el('label', {}, 'Flotte'), filterSelect('fleet', allFleets, 'Toutes')),
+          el('div', {}, el('label', {}, 'Ship Manager'), filterSelect('shipManager', allManagers, 'Tous')),
+          el('div', {}, el('label', {}, 'Fuel type'), filterSelect('fuelType', allFuels, 'Tous'))),
+
+        el('h4', { style: 'margin:14px 0 4px;color:var(--accent-2)' }, 'Axes dossier'),
+        el('div', { class: 'form-row cols-4' },
+          el('div', {}, el('label', {}, 'Département'), filterSelect('dept', allDepts, 'Tous')),
+          el('div', {}, el('label', {}, 'Type'), filterSelect('type', allTypes, 'Tous')),
+          el('div', {}, el('label', {}, 'Sévérité'), filterSelect('severity', allSev, 'Toutes')),
+          el('div', {}, el('label', {}, 'Statut'), filterSelect('status', allStatus, 'Tous'))),
+        el('div', { class: 'form-row cols-2' },
+          el('div', {}, el('label', {}, 'Classification'), filterSelect('classification', allCls, 'Toutes')),
+          el('div', { style: 'align-self:end' }, resetBtn)
+        )
+      )
+    ));
+
+    // ===== Filtrage =====
+    const fromTs = analyseFilters.from ? new Date(analyseFilters.from).getTime() : null;
+    const toTs   = analyseFilters.to   ? (new Date(analyseFilters.to).getTime() + 86400000) : null;
+    const textLow = (analyseFilters.text || '').toLowerCase().trim();
+    const vQuery  = (analyseFilters.vessel || '').toLowerCase().trim();
+
+    const matches = state.incidents.filter(i => {
+      const v = vesselByName[i.vessel];
+      // Période
+      const ts = i.startedAt ? new Date(i.startedAt).getTime() : 0;
+      if (fromTs && ts < fromTs) return false;
+      if (toTs && ts > toTs) return false;
+      // Navire (nom partiel ou IMO)
+      if (vQuery) {
+        const nm = (i.vessel || '').toLowerCase();
+        const imo = v ? (v.imo || '') : '';
+        if (!nm.includes(vQuery) && !imo.includes(vQuery)) return false;
+      }
+      // Axes navire (nécessitent que le navire soit dans le registre)
+      if (analyseFilters.fleet) {
+        if (!v || v.fleet !== analyseFilters.fleet) return false;
+      }
+      if (analyseFilters.shipManager) {
+        if (!v || v.shipManager !== analyseFilters.shipManager) return false;
+      }
+      if (analyseFilters.fuelType) {
+        if (!v || (v.fuelType || v.fuelMode) !== analyseFilters.fuelType) return false;
+      }
+      // Axes dossier
+      if (analyseFilters.dept && (i.department || 'XX') !== analyseFilters.dept) return false;
+      if (analyseFilters.type && i.type !== analyseFilters.type) return false;
+      if (analyseFilters.severity && i.severity !== analyseFilters.severity) return false;
+      if (analyseFilters.classification && (i.classification || 'INTERNAL') !== analyseFilters.classification) return false;
+      if (analyseFilters.status && i.status !== analyseFilters.status) return false;
+      // Recherche libre
+      if (textLow) {
+        const hay = ((i.summary || '') + ' ' + (i.sitrepLine || '') + ' ' + (i.ref || '')).toLowerCase();
+        if (!hay.includes(textLow)) return false;
+      }
+      return true;
+    });
+
+    // ===== Agrégats =====
+    const totalOpenOff = matches.filter(i => i.status !== 'closed')
+      .reduce((a, i) => a + (parseFloat(i.offhireEstimated) || 0), 0);
+    const totalClosedOff = matches.filter(i => i.status === 'closed')
+      .reduce((a, i) => a + (parseFloat(i.offhireActual) || 0), 0);
+
+    const byKey = (keyFn) => {
+      const m = {};
+      matches.forEach(i => { const k = keyFn(i) || '—'; m[k] = (m[k] || 0) + 1; });
+      return Object.entries(m).sort((a, b) => b[1] - a[1]);
+    };
+    const offhireByKey = (keyFn) => {
+      const m = {};
+      matches.forEach(i => {
+        const k = keyFn(i) || '—';
+        const h = (i.status === 'closed' ? (parseFloat(i.offhireActual) || 0) : (parseFloat(i.offhireEstimated) || 0));
+        m[k] = (m[k] || 0) + h;
+      });
+      return Object.entries(m).sort((a, b) => b[1] - a[1]);
+    };
+    const vesselOf = (i) => i.vessel || '—';
+    const fleetOf  = (i) => { const v = vesselByName[i.vessel]; return v ? (v.fleet || '—') : '—'; };
+    const fuelOf   = (i) => { const v = vesselByName[i.vessel]; return v ? (v.fuelType || v.fuelMode || '—') : '—'; };
+    const mgrOf    = (i) => { const v = vesselByName[i.vessel]; return v ? (v.shipManager || '—') : '—'; };
+
+    root.appendChild(panel('Résultats — ' + matches.length + ' dossier(s)',
+      el('div', {},
+        el('div', { class: 'grid-4' },
+          kpiTile('Dossiers', matches.length, matches.length ? 'warn' : 'ok'),
+          kpiTile('Off-hire estimé (ouverts)', totalOpenOff + ' h', totalOpenOff ? 'warn' : 'ok'),
+          kpiTile('Off-hire réel (clos)', totalClosedOff + ' h', 'muted'),
+          kpiTile('Off-hire total', (totalOpenOff + totalClosedOff) + ' h', 'muted')
+        ),
+
+        el('div', { class: 'flex', style: 'margin:12px 0' },
+          el('button', { class: 'btn-ghost btn-sm', onclick: () => exportAnalyseCSV(matches, vesselByName) }, '⬇ Export CSV')
+        ),
+
+        matches.length === 0
+          ? el('div', { class: 'empty' }, 'Aucun dossier ne correspond aux filtres.')
+          : tableEl(
+            ['Réf', 'Navire', 'Flotte', 'Ship Mgr', 'Fuel', 'Dépt', 'Type', 'Sév.', 'Class.', 'Démarré', 'Off-hire (h)', 'Statut'],
+            matches.slice(0, 300).map(i => {
+              const v = vesselByName[i.vessel] || {};
+              const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+              const off = i.status === 'closed'
+                ? (i.offhireActual != null ? i.offhireActual + ' h' : '⚠')
+                : ((i.offhireEstimated || 0) + ' h est.');
+              return [
+                el('span', { class: 'mono', style: 'cursor:pointer;text-decoration:underline',
+                  onclick: () => incidentForm(i.id) }, i.ref || ''),
+                i.vessel || '—',
+                v.fleet ? badge(v.fleet, 'blue') : '—',
+                v.shipManager || '—',
+                v.fuelType || v.fuelMode || '—',
+                badge(i.department || 'XX', 'blue'),
+                i.type || '',
+                badge((i.severity || '?').toUpperCase(), severityColor(i.severity)),
+                badge(cls.short, cls.color),
+                fmtTime(i.startedAt),
+                off,
+                badge(i.status, i.status === 'closed' ? 'green' : 'red')
+              ];
+            })),
+        matches.length > 300
+          ? el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:6px' },
+              '⚠ Affichage limité aux 300 premiers. Affinez les filtres ou exportez en CSV.')
+          : null
+      )
+    ));
+
+    // ===== Synthèses par axe =====
+    if (matches.length > 0) {
+      const summary = (title, items, unit) => panel(title,
+        items.length === 0 ? el('div', { class: 'empty' }, 'Néant.')
+          : el('div', { class: 'flex', style: 'flex-wrap:wrap;gap:6px' },
+              ...items.slice(0, 15).map(([k, n]) => badge(k + ' · ' + n + (unit || ''), 'blue'))));
+      root.appendChild(el('div', { class: 'grid-2' },
+        summary('Dossiers par flotte', byKey(fleetOf)),
+        summary('Dossiers par ship manager', byKey(mgrOf))
+      ));
+      root.appendChild(el('div', { class: 'grid-2' },
+        summary('Dossiers par fuel', byKey(fuelOf)),
+        summary('Dossiers par type', byKey(i => i.type))
+      ));
+      root.appendChild(el('div', { class: 'grid-2' },
+        summary('Top off-hire par navire (h)', offhireByKey(vesselOf), ' h'),
+        summary('Top off-hire par flotte (h)', offhireByKey(fleetOf), ' h')
+      ));
+    }
+  };
+
+  function exportAnalyseCSV(matches, vesselByName) {
+    if (matches.length === 0) { toast('Rien à exporter.', 'warn'); return; }
+    const headers = ['Ref','Navire','IMO','Flotte','ShipManager','FuelType','Departement','Type',
+      'Severite','Classification','Statut','DemarrageISO','ClotureISO','OffhireEstime_h','OffhireReel_h','SitrepLine'];
+    const escape = (s) => { s = (s == null ? '' : String(s)); return /[,"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const lines = [headers.join(',')];
+    matches.forEach(i => {
+      const v = vesselByName[i.vessel] || {};
+      lines.push([
+        i.ref, i.vessel, v.imo || '', v.fleet || '', v.shipManager || '',
+        v.fuelType || v.fuelMode || '', i.department || '', i.type || '',
+        i.severity || '', i.classification || 'INTERNAL', i.status,
+        i.startedAt || '', i.closedAt || '',
+        i.offhireEstimated || 0, i.offhireActual != null ? i.offhireActual : '',
+        i.sitrepLine || ''
+      ].map(escape).join(','));
+    });
+    download(`CMA_Ships_analyse_${new Date().toISOString().slice(0,10)}.csv`, lines.join('\n'));
+    toast('Export CSV (' + matches.length + ' dossiers)', 'ok');
+  }
+
   renderers.veille = (root) => {
     const mode = (window.MODES.find(m => m.code === state.alert) || window.MODES[0]);
     const recentTriggers = (state.triggerEvents || []).slice(0, 5);
