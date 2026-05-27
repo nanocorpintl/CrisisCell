@@ -1001,22 +1001,32 @@
 
     root.appendChild(panel('Technical & Crewing cases',
       el('div', {},
-        el('p', { class: 'muted' }, 'Open case follow-up — owned by the Duty Officer of each department (FM, CR, FU) for their scope; the Duty Manager for transverse subjects. Outside SSE scope (covered by the dedicated tool).'),
-        el('div', { class: 'flex-between', style: 'margin-bottom:8px' },
-          el('div', { class: 'muted' }, `${filtered.length} / ${state.incidents.length} case(s) shown`),
-          el('button', { class: 'btn-primary', onclick: () => incidentForm() }, '+ New case (i)')
+        el('div', { class: 'flex-between', style: 'margin-bottom:6px' },
+          el('div', { class: 'muted', style: 'font-size:11.5px' }, `${filtered.length} / ${state.incidents.length} case(s) shown`),
+          el('div', { class: 'flex', style: 'gap:6px' },
+            el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+              if (state.vessels.length === 0) { toast('Import vessels first', 'warn'); return; }
+              const n = parseInt(prompt('How many synthetic cases to generate?', '20') || '0', 10);
+              if (!n || n <= 0) return;
+              const created = generateSyntheticDossiers(n);
+              toast(`${created} synthetic cases created`, 'ok');
+              logMEL('VESSEL', `${created} synthetic cases generated (demo)`);
+              save(); setTab('incidents');
+            } }, '⚙ Generate cases'),
+            el('button', { class: 'btn-primary btn-sm', onclick: () => incidentForm() }, '+ New case (i)')
+          )
         ),
-        // Bandeau filtres (2 lignes)
-        el('div', { class: 'form-row cols-4', style: 'margin-bottom:6px' },
+        // Filters condensed on 2 rows of 4
+        el('div', { class: 'form-row cols-4', style: 'margin-bottom:4px' },
           el('div', {}, el('label', {}, 'Search'), fSearch),
           el('div', {}, el('label', {}, 'Department'), fDept),
           el('div', {}, el('label', {}, 'Type'), fType),
           el('div', {}, el('label', {}, 'Severity'), fSev)
         ),
-        el('div', { class: 'form-row cols-3', style: 'margin-bottom:10px' },
+        el('div', { class: 'form-row cols-4', style: 'margin-bottom:8px' },
           el('div', {}, el('label', {}, 'Classification'), fCls),
           el('div', {}, el('label', {}, 'Status'), fStatus),
-          el('div', { style: 'align-self:end' }, fReset)
+          el('div', { style: 'align-self:end;grid-column:span 2' }, fReset)
         ),
         filtered.length === 0
           ? el('div', { class: 'empty' }, state.incidents.length === 0 ? 'No case.' : 'No case matches the filters.')
@@ -2886,25 +2896,30 @@
       save(); setTab('dosit-' + dept.toLowerCase());
     };
 
+    const allCollapsed = fleetKeys.length > 0 && fleetKeys.every(f => filter.collapsed.has(f));
+    const toggleAll = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+      if (allCollapsed) filter.collapsed.clear();
+      else fleetKeys.forEach(f => filter.collapsed.add(f));
+      setTab('dosit-' + dept.toLowerCase());
+    } }, allCollapsed ? '▾ Expand all' : '▸ Collapse all');
+
     root.appendChild(panel('My SITREP — ' + dept + ' · ' + deptLabel,
       el('div', {},
-        el('p', { class: 'muted' },
-          'Duty Officer view ' + dept + '. All cases of this department, grouped by fleet (foldable). Tick the checkbox to include the case in the CMA Ships SITREP.'),
         twoCol('Department status', status, 'Duty Officer (name)', doName),
 
-        el('h4', { style: 'margin:14px 0 4px;font-size:13px;color:var(--accent-2)' }, 'Filter by severity'),
-        el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap' },
+        el('div', { class: 'flex', style: 'gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 6px' },
+          el('span', { class: 'muted', style: 'font-size:11.5px;font-weight:600' }, 'Severity:'),
           sevToggle('crit', 'CRIT'), sevToggle('high', 'HIGH'),
-          sevToggle('med',  'MED'),  sevToggle('low',  'LOW')),
-        el('h4', { style: 'margin:14px 0 4px;font-size:13px;color:var(--accent-2)' }, 'Filter by status'),
-        el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap' },
+          sevToggle('med',  'MED'),  sevToggle('low',  'LOW'),
+          el('span', { style: 'width:8px' }),
+          el('span', { class: 'muted', style: 'font-size:11.5px;font-weight:600' }, 'Status:'),
           statToggle('open', 'OPEN'), statToggle('monitoring', 'MONITORING'),
           statToggle('closed', 'CLOSED')),
 
-        el('h4', { style: 'margin:14px 0 4px;font-size:13px;color:var(--accent-2)' },
-          'Cases by fleet ',
-          el('span', { class: 'muted', style: 'font-weight:normal;font-size:11.5px' },
-            '· ' + allDeptCases.length + ' total · click a fleet header to collapse/expand')),
+        el('div', { class: 'flex-between', style: 'margin:8px 0 4px' },
+          el('span', { class: 'muted', style: 'font-size:11.5px;font-weight:600;color:var(--accent-2)' },
+            'Cases by fleet · ' + allDeptCases.length + ' total'),
+          toggleAll),
         fleetKeys.length === 0
           ? el('div', { class: 'empty' }, 'No case matches the filters for ' + dept + '.')
           : el('div', {}, ...fleetBlocks),
