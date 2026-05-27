@@ -851,119 +851,91 @@
   // ============================================================
   //   COP
   // ============================================================
+  // Persisted toggle for the COP cases panel: 'day' or 'week'
+  if (typeof window._copWindow === 'undefined') window._copWindow = 'day';
+
   renderers.cop = (root) => {
     const activeIncidents = state.incidents.filter(i => i.status !== 'closed');
-    const vesselsAtRisk = state.vessels.filter(v => v.status === 'incident' || v.status === 'risk');
-    const overdue = state.actions.filter(a => a.status !== 'done' && a.due && new Date(a.due) < new Date()).length;
-    const openActions = state.actions.filter(a => a.status !== 'done').length;
-    const frActives = (state.frictions || []).filter(f => f.status !== 'closed').length;
     const mode = window.MODES.find(m => m.code === state.alert) || window.MODES[0];
 
-    root.appendChild(panel('Duty Manager backlog',
-      el('div', { class: 'muted' },
-        'Duty Manager overview: everything running in parallel (cases, frictions, actions, Duty Log notes). Continuously updated. ',
-        state.opsPeriod ? el('span', {}, '— OPS Period : ', el('strong', {}, state.opsPeriod)) : null)
-    ));
-
-    // Off-hire — somme des risques sur les dossiers ouverts + total réel sur les dossiers clos
+    // Off-hire metrics
     const offhireSum = (filterFn, key) => state.incidents
       .filter(filterFn)
       .reduce((acc, i) => acc + (parseFloat(i[key]) || 0), 0);
     const offhireOpen = offhireSum(i => i.status !== 'closed', 'offhireEstimated');
-    const offhireClosed = offhireSum(i => i.status === 'closed', 'offhireActual');
     const offhireByDept = (dept) => offhireSum(
       i => i.status !== 'closed' && (i.department || 'XX') === dept, 'offhireEstimated');
+    const offM = computeOffhireMetrics();
+    const ratioTone = offM.ratio >= 100 ? 'danger' : offM.ratio >= 75 ? 'warn' : 'ok';
 
-    // Classification — répartition des dossiers ouverts (intégrée à la tile Dossiers)
+    // Classification breakdown
     const clsCount = {};
     activeIncidents.forEach(i => { const k = i.classification || 'INTERNAL'; clsCount[k] = (clsCount[k] || 0) + 1; });
     const clsSubtitle = el('div', { class: 'flex', style: 'gap:4px;flex-wrap:wrap;margin-top:4px' },
       ...window.CLASSIFICATIONS.map(c => badge(c.short + ' ' + (clsCount[c.code] || 0), c.color))
     );
 
+    // Single condensed KPI row (Mode · Open cases + classif · Off-hire · YTD vs target)
     const kpis = el('div', { class: 'grid-4' },
       kpiTile('Mode', mode.statut,
         mode.code === 'crise' ? 'danger' : mode.code === 'vigilance' ? 'warn' : 'ok',
         mode.label),
       kpiTile('Open cases', activeIncidents.length,
         activeIncidents.length ? 'warn' : 'ok', clsSubtitle),
-      kpiTile('Active frictions', frActives, frActives ? 'warn' : 'ok'),
-      kpiTile('Overdue actions', overdue, overdue ? 'danger' : (openActions ? 'warn' : 'ok'),
-        openActions + ', open')
+      kpiTile('Off-hire (open)', fmtH(offhireOpen),
+        offhireOpen > 240 ? 'danger' : offhireOpen > 72 ? 'warn' : 'ok',
+        `FM ${Math.round(offhireByDept('FM'))} · CR ${Math.round(offhireByDept('CR'))} · FU ${Math.round(offhireByDept('FU'))}`),
+      kpiTile('YTD vs target', offM.ratio + ' %', ratioTone,
+        `${fmtH(offM.ytdActual)} / ${offM.ytdTarget} h (99.5% × ${offM.nVessels} vessels)`)
     );
     root.appendChild(kpis);
 
-    // Off-hire — panel dédié : 4 KPIs (In progress · Week · YTD · vs Objectif)
-    const offM = computeOffhireMetrics();
-    const ratioTone = offM.ratio >= 100 ? 'danger' : offM.ratio >= 75 ? 'warn' : 'ok';
-    const offhireKpis = el('div', { class: 'grid-4' },
-      kpiTile('Estimated (open)',
-        fmtH(offhireOpen),
-        offhireOpen > 240 ? 'danger' : offhireOpen > 72 ? 'warn' : 'ok',
-        `FM ${offhireByDept('FM')} · CR ${offhireByDept('CR')} · FU ${offhireByDept('FU')}`),
-      kpiTile('New this week',
-        fmtH(offM.weekNew),
-        offM.weekNew > 48 ? 'warn' : 'ok',
-        'opened since Monday'),
-      kpiTile('YTD actual',
-        fmtH(offM.ytdActual),
-        'muted',
-        `${offM.daysElapsed}d since Jan 1`),
-      kpiTile('YTD vs target',
-        offM.ratio + ' %',
-        ratioTone,
-        `target ${offM.ytdTarget} h (99.5% × ${offM.nVessels}vessels)`)
-    );
-    root.appendChild(panel('Off-hire',
+    // Cases modified or opened today / this week (toggle)
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const dayOfWeek = now.getDay() || 7;
+    const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - dayOfWeek + 1);
+    startOfWeek.setHours(0, 0, 0, 0);
+    const since = window._copWindow === 'week' ? startOfWeek.getTime() : startOfDay;
+
+    const recent = state.incidents
+      .filter(i => i.status !== 'closed' && i.startedAt && new Date(i.startedAt).getTime() >= since)
+      .slice()
+      .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
+    const toggleBtn = (key, label) => {
+      const active = window._copWindow === key;
+      return el('button', {
+        class: active ? 'btn-primary btn-sm' : 'btn-ghost btn-sm',
+        onclick: () => { window._copWindow = key; setTab('cop'); }
+      }, label);
+    };
+
+    root.appendChild(panel('Cases modified / opened',
       el('div', {},
-        el('p', { class: 'muted', style: 'margin-bottom:10px' },
-          'Availability target: 99,5% over 365 days (~43.8 h off-hire/vessel/year). YTD target = ' + offM.ytdTarget + ' h for ' + offM.nVessels + 'vessel(s).'),
-        offhireKpis
+        el('div', { class: 'flex', style: 'gap:6px;margin-bottom:8px' },
+          toggleBtn('day', 'Today'),
+          toggleBtn('week', 'This week'),
+          el('span', { class: 'muted', style: 'font-size:11.5px;align-self:center;margin-left:6px' },
+            `${recent.length} case(s)`)),
+        recent.length === 0
+          ? el('div', { class: 'empty' }, window._copWindow === 'week' ? 'No case opened this week.' : 'No case opened today.')
+          : tableEl(['Ref', 'Dept', 'Type', 'Vessel', 'Sev.', 'Class.', 'Started'],
+            recent.map(i => {
+              const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+              return [
+                el('span', { class: 'mono', style: 'cursor:pointer;text-decoration:underline',
+                  onclick: () => incidentForm(i.id) }, i.ref || ''),
+                badge(i.department || 'XX', 'blue'),
+                i.type || '', i.vessel || '',
+                badge((i.severity || '?').toUpperCase(), severityColor(i.severity)),
+                badge(cls.short, cls.color),
+                fmtTime(i.startedAt)
+              ];
+            })),
+        el('button', { class: 'btn-ghost btn-sm', style: 'margin-top:6px',
+          onclick: () => setTab('incidents') }, 'See all cases →')
       )
-    ));
-
-    // Quickbar — saisie MEL ultra-rapide
-    const qbCat = el('select', {}, ...['INFO','INC','DECISION','COMMS','ACTION','SAFETY','SECURITY','MEDIA','VESSEL','OTHER']
-      .map(c => el('option', { value: c }, c)));
-    const qbAuthor = el('input', { value: currentUserName(), placeholder: 'Author', list: 'dl-authors' });
-    const qbText = el('textarea', { placeholder: 'Quick event capture (Ctrl+Enter to send)…' });
-    const qbBtn = el('button', { class: 'btn-primary', onclick: () => {
-      if (!qbText.value.trim()) return;
-      logMEL(qbCat.value, qbText.value.trim(), qbAuthor.value || currentUserName() || 'Anonyme');
-      qbText.value = '';
-      toast('Event recorded', 'ok');
-      setTab('cop');
-    } }, '⏎ Log');
-    qbText.addEventListener('keydown', e => {
-      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); qbBtn.click(); }
-    });
-    root.appendChild(el('div', { class: 'quickbar' },
-      qbCat, qbAuthor, qbText, qbBtn,
-      el('div', { class: 'qb-hint' }, 'L: quick focus · Ctrl+Enter: send')
-    ));
-
-    root.appendChild(panel('Open cases',
-      activeIncidents.length === 0
-        ? el('div', { class: 'empty' }, 'No open case.')
-        : tableEl(['Ref', 'Dept', 'Type', 'Vessel', 'Sev.', 'Class.', 'Started'],
-          activeIncidents.slice(0, 8).map(i => {
-            const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
-            return [
-              el('span', { class: 'mono' }, i.ref || ''),
-              badge(i.department || 'XX', 'blue'),
-              i.type || '', i.vessel || '',
-              badge((i.severity || '?').toUpperCase(), severityColor(i.severity)),
-              badge(cls.short, cls.color),
-              fmtTime(i.startedAt)
-            ];
-          })),
-      el('button', { class: 'btn-primary btn-sm', onclick: () => setTab('incidents') }, 'See all →')
-    ));
-
-    root.appendChild(panel('Duty Log — recent entries',
-      state.mel.length === 0
-        ? el('div', { class: 'empty' }, 'Empty log.')
-        : el('div', {}, ...state.mel.slice(0, 10).map(meEntry))
     ));
   };
 
@@ -1199,16 +1171,40 @@
         classification: classification.value,
         offhireEstimated: parseFloat(offhireEst.value) || 0,
         offhireActual: offhireAct.value === '' ? null : parseFloat(offhireAct.value),
-        includeInSitrep: includeInSitrep.checked
+        includeInSitrep: includeInSitrep.checked,
+        history: (inc.history || []).slice()
       };
       if (data.status === 'closed' && !data.closedAt) data.closedAt = nowISO();
       if (idEdit) {
+        // Compute diff vs previous version → append history entries
+        const prev = inc;
+        const tracked = ['type','vessel','department','severity','status','classification',
+                          'summary','sitrepLine','offhireEstimated','offhireActual','includeInSitrep'];
+        const changes = [];
+        tracked.forEach(k => {
+          const a = prev[k]; const b = data[k];
+          if ((a == null ? '' : String(a)) !== (b == null ? '' : String(b))) {
+            changes.push({ field: k, from: a, to: b });
+          }
+        });
+        if (changes.length) {
+          data.history.push({
+            ts: nowISO(),
+            author: currentUserName() || 'Anonymous',
+            changes
+          });
+        }
         state.incidents[state.incidents.findIndex(i => i.id === idEdit)] = data;
         const offMsg = data.status === 'closed'
-          ? ` · off-hire RÉEL : ${data.offhireActual} h`
+          ? ` · ACTUAL off-hire: ${data.offhireActual} h`
           : ` · estimated off-hire: ${data.offhireEstimated} h`;
         logMEL('DOSSIER', `Case ${data.ref} updated (${data.status})${offMsg}`);
       } else {
+        data.history.push({
+          ts: nowISO(),
+          author: currentUserName() || 'Anonymous',
+          changes: [{ field: 'created', from: null, to: data.ref }]
+        });
         state.incidents.push(data);
         logMEL('DOSSIER', `New case [${data.department}] ${data.ref} — ${data.type} on ${data.vessel || 'n/a'} (sev ${data.severity}, estimated off-hire ${data.offhireEstimated} h)`);
         if (data.severity === 'crit') state.alert = 'crise';
@@ -1231,8 +1227,12 @@
       field('Status', status),
       field('Start date', startedAt),
       field('One-line summary (appears in the DO SITREP)', sitrepLine),
-      el('label', { class: 'flex', style: 'gap:6px;align-items:center;margin:6px 0' },
-        includeInSitrep, el('span', {}, 'Include this case in SITREPs (uncheck to omit)')),
+      el('label', {
+        style: 'display:flex;gap:8px;align-items:center;margin:8px 0;padding:8px;background:rgba(58,160,255,0.08);border-radius:4px;cursor:pointer'
+      },
+        includeInSitrep,
+        el('span', { style: 'font-weight:600;color:var(--text)' }, '☐ Include this case in SITREPs '),
+        el('span', { class: 'muted', style: 'font-size:11.5px' }, '(uncheck to omit from the consolidated CMA SITREP)')),
       field('Detailed description', summary),
       el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Off-hire'),
       twoCol('Estimated off-hire (hours)', offhireEst, 'Actual off-hire (closure — MANDATORY)', offhireAct),
@@ -1241,7 +1241,33 @@
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Update' : 'Create'),
         el('button', { class: 'btn-ghost', onclick: closeModal }, 'Cancel')
-      )
+      ),
+      // ===== Modification history (most recent first) =====
+      (idEdit && inc.history && inc.history.length > 0) ? el('div', { style: 'margin-top:18px' },
+        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2);border-top:1px solid var(--border);padding-top:10px' },
+          'Modification history',
+          el('span', { class: 'muted', style: 'font-weight:normal;font-size:11.5px;margin-left:6px' },
+            inc.history.length + ' entry(ies)')),
+        ...inc.history.slice().reverse().map(h => el('div', {
+          style: 'border-left:2px solid var(--border);padding:6px 10px;margin-bottom:4px;font-size:12.5px;background:rgba(255,255,255,.02)'
+        },
+          el('div', { style: 'display:flex;gap:8px;align-items:baseline' },
+            el('span', { class: 'mono', style: 'color:var(--accent-2);font-size:11.5px' }, fmtDTG(h.ts)),
+            el('span', { class: 'muted', style: 'font-size:11.5px' }, '· ' + (h.author || 'Anonymous'))),
+          el('div', { style: 'margin-top:4px;font-size:12px' },
+            ...(h.changes || []).map(c => {
+              if (c.field === 'created') {
+                return el('div', {}, '✚ Case created (' + c.to + ')');
+              }
+              const fmtVal = v => v == null || v === '' ? '—' : (typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v).slice(0, 80));
+              return el('div', {},
+                el('strong', {}, c.field), ': ',
+                el('span', { class: 'muted' }, fmtVal(c.from)),
+                ' → ',
+                el('span', {}, fmtVal(c.to)));
+            }))
+        ))
+      ) : null
     );
     openModal(idEdit ? 'Edit case' : 'New case', form, { onSubmit: submit });
   }
@@ -1646,69 +1672,107 @@
       el('span', { class: 'muted', style: 'min-width:160px' }, label),
       el('span', {}, String(val))) : null;
 
+    const sectionH = (txt) => el('h4', { style: 'margin:14px 0 4px;color:var(--accent-2);font-size:13px;border-bottom:1px solid var(--border);padding-bottom:3px' }, txt);
+
     openModal('Vessel — ' + v.name,
       el('div', {},
-        el('div', { class: 'flex', style: 'gap:8px;margin-bottom:10px;flex-wrap:wrap' },
-          badge(v.fleet || '—', 'blue'), badge(v.shipManager || '—', 'grey'),
-          badge((v.fuelType || v.fuelMode || '—'), 'orange'), vesselStatusBadge(v.status)),
+        // Header: badges + main info
+        el('div', { style: 'padding:10px;background:rgba(58,160,255,.06);border-radius:6px;margin-bottom:12px' },
+          el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap;align-items:center' },
+            v.imo ? el('span', { class: 'mono', style: 'font-size:12px;color:var(--muted)' }, 'IMO ' + v.imo) : null,
+            v.fleet ? badge(v.fleet, 'blue') : null,
+            v.shipManager ? badge(v.shipManager, 'grey') : null,
+            badge(v.fuelType || v.fuelMode || '—', 'orange'),
+            vesselStatusBadge(v.status),
+            v.type ? el('span', { style: 'font-size:12px;color:var(--muted)' }, '· ' + v.type) : null),
+          el('div', { style: 'display:flex;gap:14px;margin-top:8px;font-size:12px;flex-wrap:wrap' },
+            el('div', {}, el('span', { class: 'muted' }, 'Open cases : '),
+              el('strong', { style: open.length ? 'color:var(--danger)' : '' }, open.length)),
+            el('div', {}, el('span', { class: 'muted' }, 'YTD off-hire : '),
+              el('strong', {}, fmtH(offhireYTD))),
+            el('div', {}, el('span', { class: 'muted' }, 'Open off-hire est. : '),
+              el('strong', {}, fmtH(offhireOpen))),
+            el('div', {}, el('span', { class: 'muted' }, 'Closed cases : '),
+              el('strong', {}, closed.length))
+          )),
 
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'Identification'),
-        kv('IMO', v.imo), kv('Type / series', v.type), kv('Hull No.', v.hullNb),
-        kv('Previous name', v.previousName), kv('2nd hand', v.secondHand),
-        kv('Flag', v.flag), kv('Classification', v['class']),
-        kv('Registered owner', v.registeredOwner), kv('Bareboat', v.bareboat),
-        kv('Contractual owner', v.contractualOwner),
+        // ===== Linked cases (top) =====
+        sectionH('Linked cases — open'),
+        open.length === 0
+          ? el('div', { class: 'empty', style: 'padding:10px' }, 'No open case for this vessel.')
+          : el('div', {}, ...open.map(i => {
+              const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+              return el('div', {
+                style: 'display:flex;gap:8px;align-items:center;padding:6px 8px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12.5px',
+                onclick: () => { closeModal(); incidentForm(i.id); }
+              },
+                badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+                badge(cls.short, cls.color),
+                badge(i.department || 'XX', 'blue'),
+                el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref),
+                el('span', { style: 'flex:1' }, i.type + (i.sitrepLine ? ' — ' + i.sitrepLine : '')),
+                el('span', { class: 'muted', style: 'font-size:11px' }, fmtDTG(i.startedAt)));
+            })),
+        closed.length > 0 ? el('details', { style: 'margin-top:8px' },
+          el('summary', { style: 'cursor:pointer;color:var(--muted);font-size:12px' }, '+ Show ' + closed.length + ' closed case(s)'),
+          el('div', { style: 'margin-top:6px' }, ...closed.slice(0, 30).map(i => {
+            return el('div', {
+              style: 'display:flex;gap:8px;align-items:center;padding:4px 8px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px;opacity:.75',
+              onclick: () => { closeModal(); incidentForm(i.id); }
+            },
+              badge(i.department || 'XX', 'blue'),
+              el('span', { class: 'mono', style: 'font-size:11px' }, i.ref),
+              el('span', { style: 'flex:1' }, i.type),
+              el('span', {}, fmtH(i.offhireActual)),
+              el('span', { class: 'muted', style: 'font-size:11px' }, fmtDTG(i.closedAt)));
+          }))) : null,
 
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'CMA Ships management'),
-        kv('Fleet', v.fleet), kv('Ship Manager', v.shipManager),
-        kv('Fleet Manager', v.fleetManager), kv('Email', v.fleetManagerEmail),
-        kv('Superintendent (SI)', v.SI), kv('SI mobile', v.SI_mobile), kv('SI email', v.SI_email),
-        kv('DPA / CSO', v.DPA_CSO), kv('Deputy DPA/CSO', v.deputyDPA),
-        kv('MSO', v.MSO), kv('Safety Group', v.safetyGroup),
+        // ===== Identification & key info =====
+        sectionH('Identification'),
+        el('div', { class: 'grid-2', style: 'font-size:12.5px' },
+          el('div', {}, kv('Type / series', v.type), kv('Hull No.', v.hullNb),
+            kv('Previous name', v.previousName), kv('2nd hand', v.secondHand)),
+          el('div', {}, kv('Flag', v.flag), kv('Class', v['class']),
+            kv('Registered owner', v.registeredOwner), kv('Bareboat', v.bareboat),
+            kv('Contractual owner', v.contractualOwner))),
 
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'Capabilities'),
-        kv('GT', v.GT), kv('Capacity', v.capacity),
-        kv('LOA (m)', v.LOA), kv('Beam (m)', v.breadth),
-        kv('Shipyard', v.yard), kv('Year', v.builtIn),
+        sectionH('CMA Ships management'),
+        el('div', { class: 'grid-2', style: 'font-size:12.5px' },
+          el('div', {}, kv('Fleet Manager', v.fleetManager), kv('Email', v.fleetManagerEmail),
+            kv('Superintendent', v.SI), kv('SI mobile', v.SI_mobile), kv('SI email', v.SI_email)),
+          el('div', {}, kv('DPA / CSO', v.DPA_CSO), kv('Deputy DPA/CSO', v.deputyDPA),
+            kv('MSO', v.MSO), kv('Safety Group', v.safetyGroup))),
 
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'Main engine (M/E)'),
-        kv('Designer', v.ME_designer), kv('Licensee', v.ME_licensee),
-        kv('Type', v.ME_type), kv('Mark', v.ME_mark),
-        kv('Stroke', v.ME_stroke), kv('Units', v.ME_units), kv('Bore', v.ME_bore),
-        kv('TIII', v.ME_TIII), kv('T/C', (v.ME_TC_maker || '') + ' / ' + (v.ME_TC_model || '')),
+        sectionH('Technical'),
+        el('div', { class: 'grid-2', style: 'font-size:12.5px' },
+          el('div', {},
+            el('div', { class: 'muted', style: 'margin:4px 0' }, 'Main engine'),
+            kv('Designer', v.ME_designer), kv('Licensee', v.ME_licensee),
+            kv('Type', v.ME_type), kv('Mark', v.ME_mark),
+            kv('Stroke', v.ME_stroke), kv('Units', v.ME_units), kv('Bore', v.ME_bore),
+            kv('TIII', v.ME_TIII), kv('T/C', v.ME_TC_maker || v.ME_TC_model ? ((v.ME_TC_maker || '') + ' / ' + (v.ME_TC_model || '')) : '')),
+          el('div', {},
+            el('div', { class: 'muted', style: 'margin:4px 0' }, 'Energy & propulsion'),
+            kv('Propulsion', v.propulsionType),
+            kv('Number of DG', v.numDG),
+            kv('A/E TIII', v.AE_TIII),
+            kv('1st LNG bunker', v.firstLNGBunkering),
+            kv('Lubricator', v.lubricator),
+            el('div', { class: 'muted', style: 'margin:8px 0 4px' }, 'Capacity'),
+            kv('GT', v.GT), kv('Capacity', v.capacity),
+            kv('LOA (m)', v.LOA), kv('Beam (m)', v.breadth),
+            kv('Shipyard', v.yard), kv('Year', v.builtIn))),
 
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'Energy Énergie & propulsion propulsion'),
-        kv('Fuel type', v.fuelType || v.fuelMode),
-        kv('Propulsion', v.propulsionType),
-        kv('Number of DG', v.numDG),
-        kv('A/E TIII', v.AE_TIII),
-        kv('1st LNG bunker', v.firstLNGBunkering),
-        kv('Lubricator', v.lubricator),
+        sectionH('Crewing & dates'),
+        el('div', { class: 'grid-2', style: 'font-size:12.5px' },
+          el('div', {}, kv('Crew complement', v.crewNb),
+            kv('Crew Mgr FR', v.crewMgrFR), kv('Crew Mgr INTL', v.crewMgrINTL),
+            kv('Citadel', v.citadel), kv('MS Teams onboard', v.msTeamsOnboard),
+            kv('NaviSys Contract holder', v.naviSysContractHolder)),
+          el('div', {}, kv('Fleet entry', v.fleetEntryDate), kv('Delivery', v.deliveryDate),
+            kv('Class anniv.', v.classAnniversary), kv('Out of management', v.outOfMgmtDate))),
 
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'Crewing & security'),
-        kv('Crew complement', v.crewNb),
-        kv('Crew Mgr FR', v.crewMgrFR), kv('Crew Mgr INTL', v.crewMgrINTL),
-        kv('Citadel', v.citadel), kv('MS Teams onboard', v.msTeamsOnboard),
-        kv('NaviSys Contract holder', v.naviSysContractHolder),
-
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'Key dates'),
-        kv('Fleet entry', v.fleetEntryDate), kv('Delivery', v.deliveryDate),
-        kv('Class anniv.', v.classAnniversary), kv('Out of management', v.outOfMgmtDate),
-
-        el('h4', { style: 'margin:10px 0 4px;color:var(--accent-2)' }, 'Linked cases'),
-        el('div', { style: 'font-size:12px' },
-          'Open: ', badge(open.length, open.length ? 'red' : 'grey'), ' · ',
-          'Closed: ', badge(closed.length, 'grey'), ' · ',
-          'YTD off-hire: ', badge(fmtH(offhireYTD), 'orange'), ' · ',
-          'Open estimated off-hire : ', badge(fmtH(offhireOpen), 'orange')),
-        open.length === 0 ? null : el('div', { style: 'margin-top:6px' },
-          ...open.map(i => el('div', { class: 'pb-step', style: 'cursor:pointer', onclick: () => incidentForm(i.id) },
-            badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
-            el('div', { class: 'pb-text' },
-              el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref + ' · '),
-              i.sitrepLine || i.type)))),
-
-        el('div', { class: 'flex', style: 'margin-top:14px' },
+        el('div', { class: 'flex', style: 'margin-top:14px;border-top:1px solid var(--border);padding-top:12px' },
           el('button', { class: 'btn-primary', onclick: () => { closeModal(); vesselForm(v.id); } }, 'Edit'),
           el('button', { class: 'btn-ghost', onclick: closeModal }, 'Close'))
       ));
@@ -2012,25 +2076,6 @@
   //   MEL
   // ============================================================
   renderers.mel = (root) => {
-    const cat = el('select', {}, ...['INFO','DOSSIER','DECISION','COMMS','ACTION','VESSEL','DOSIT','OTHER']
-      .map(c => el('option', { value: c }, c)));
-    const author = el('input', { value: currentUserName(), list: 'dl-authors' });
-    const text = el('textarea', { placeholder: 'Note (Ctrl+Enter to send)' });
-    const submit = () => {
-      if (!text.value.trim()) return;
-      logMEL(cat.value, text.value.trim(), author.value || currentUserName() || 'Anonyme');
-      text.value = '';
-      setTab('mel');
-    };
-    text.addEventListener('keydown', e => { if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); submit(); } });
-    root.appendChild(panel('Duty Log',
-      el('div', {},
-        el('p', { class: 'muted' }, 'Duty Manager chronological journal (cf. Duty Manager JD: "Maintain the Duty Log in real time"). Notes au fil de l\'eau, traçabilité pour audit et passation. Distinct from Cases (long follow-up) and Actions (to-do).'),
-        twoCol('Category', cat, 'Author', author),
-        field('Note', text),
-        el('button', { class: 'btn-primary', onclick: submit }, '+ Record')
-      )
-    ));
     root.appendChild(panel('Entries',
       state.mel.length === 0
         ? el('div', { class: 'empty' }, 'No entry yet.')
@@ -2731,112 +2776,145 @@
   //   Alimente automatiquement le CMA Ships SITREP consolidated
   //   (Today's cases / Due dates 24-72 h / Frictions to report).
   // ============================================================
+  // Per-DO-SITREP filter & UI state (per dept). Keys: severity (set), status (set), collapsedFleets (set)
+  if (typeof window._doSitFilter === 'undefined') window._doSitFilter = {};
+  function getDoFilter(dept) {
+    if (!window._doSitFilter[dept]) {
+      window._doSitFilter[dept] = {
+        sevs: new Set(['crit','high','med','low']),
+        stats: new Set(['open','monitoring','closed']),
+        collapsed: new Set()
+      };
+    }
+    return window._doSitFilter[dept];
+  }
+
   function renderDoSitrep(root, dept) {
     state.lastDoDept = dept;
     const deptLabel = (window.DEPARTMENTS.find(d => d.code === dept) || {}).label || dept;
-    const d = state.deptSitreps[dept] || { status: 'green', dossiers: '', deadlines: '', frictions: '' };
+    const d = state.deptSitreps[dept] || { status: 'green' };
+    const filter = getDoFilter(dept);
 
-    const status = el('select', {}, ...[['green','VERT'],['amber','AMBRE'],['red','ROUGE']]
+    const status = el('select', {}, ...[['green','GREEN'],['amber','AMBER'],['red','RED']]
       .map(([k, l]) => el('option', { value: k, selected: d.status === k }, l)));
     const doName = el('input', { value: state.dutyOfficers[dept] || currentUserName(), placeholder: 'DO name ' + dept });
 
-    // Today's cases : auto depuis l'onglet Dossiers, triés par sévérité.
+    // All cases of this dept (not just open, not just today)
     const sevOrderDo = { crit: 0, high: 1, med: 2, low: 3 };
-    const openDossiers = state.incidents
-      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept && i.includeInSitrep !== false)
+    const allDeptCases = state.incidents
+      .filter(i => (i.department || 'XX') === dept)
+      .filter(i => filter.sevs.has(i.severity || 'med'))
+      .filter(i => filter.stats.has(i.status || 'open'))
       .slice()
       .sort((a, b) => (sevOrderDo[a.severity] ?? 9) - (sevOrderDo[b.severity] ?? 9));
 
-    const dossiersPreview = el('div', {},
-      openDossiers.length === 0
-        ? el('div', { class: 'empty', style: 'padding:14px' }, 'No open case for ' + dept + '. Create un dossier dans l\'onglet "Dossiers" pour qu\'il apparaisse ici.')
-        : el('div', {}, ...openDossiers.map(i => {
-            const v = (i.vessel || 'n/a').toUpperCase();
-            const raw = (i.sitrepLine || i.type || '').trim();
-            const line = raw.toUpperCase().startsWith(v) ? raw : (raw ? v + ' — ' + raw : v);
-            const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
-            return el('div', {
-              class: 'pb-step',
-              style: 'cursor:pointer',
-              onclick: () => incidentForm(i.id)
-            },
-              badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
-              badge(cls.short, cls.color),
-              el('div', { class: 'pb-text', style: 'flex:1' },
-                el('span', { class: 'mono', style: 'color:var(--muted);font-size:11px' }, i.ref + ' · '),
-                line)
-            );
-          }))
-    );
+    // Group by fleet (from vessel registry)
+    const vesselByName = {};
+    state.vessels.forEach(v => { vesselByName[v.name] = v; });
+    const groupedByFleet = {};
+    allDeptCases.forEach(i => {
+      const v = vesselByName[i.vessel];
+      const fleet = (v && v.fleet) || '— Unassigned fleet —';
+      (groupedByFleet[fleet] = groupedByFleet[fleet] || []).push(i);
+    });
+    const fleetKeys = Object.keys(groupedByFleet).sort();
 
-    // Due dates 24-72 h : auto depuis Actions du dept
-    const now = Date.now();
-    const in24 = now + 24 * 3600 * 1000;
-    const in72 = now + 72 * 3600 * 1000;
-    const dueActions = state.actions
-      .filter(a => a.status !== 'done' && (a.department || 'XX') === dept &&
-                   a.due && new Date(a.due).getTime() >= in24 && new Date(a.due).getTime() <= in72);
-    const deadlinesPreview = el('div', {},
-      dueActions.length === 0
-        ? el('div', { class: 'empty', style: 'padding:14px' }, 'No deadline within the 24-72h window.')
-        : el('div', {}, ...dueActions.map(a => el('div', { class: 'pb-step' },
-            badge(a.priority || 'P3', a.priority === 'P1' ? 'red' : 'blue'),
-            el('div', { class: 'pb-text', style: 'flex:1' },
-              a.text, el('span', { class: 'muted', style: 'font-size:11px' }, ' — ' + (a.owner || '—') + ' (' + fmtDTG(a.due) + ')'))
-          )))
-    );
+    // Filter toggles (multi)
+    const sevToggle = (s, label, color) => {
+      const active = filter.sevs.has(s);
+      return el('button', {
+        class: active ? 'btn-primary btn-sm' : 'btn-ghost btn-sm',
+        onclick: () => { active ? filter.sevs.delete(s) : filter.sevs.add(s); setTab('dosit-' + dept.toLowerCase()); }
+      }, label);
+    };
+    const statToggle = (s, label) => {
+      const active = filter.stats.has(s);
+      return el('button', {
+        class: active ? 'btn-primary btn-sm' : 'btn-ghost btn-sm',
+        onclick: () => { active ? filter.stats.delete(s) : filter.stats.add(s); setTab('dosit-' + dept.toLowerCase()); }
+      }, label);
+    };
 
-    const notesTxt = el('textarea', {
-      placeholder: 'Additional notes for your SITREP block (optional)',
-      style: 'min-height:60px'
-    }, d.deadlines || '');
+    // Build fleet blocks (collapsible)
+    const fleetBlocks = fleetKeys.map(fleet => {
+      const list = groupedByFleet[fleet];
+      const isCollapsed = filter.collapsed.has(fleet);
+      const includedCount = list.filter(i => i.includeInSitrep !== false).length;
+      const header = el('div', {
+        style: 'display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(58,160,255,.08);border-radius:4px;cursor:pointer;margin-top:8px',
+        onclick: () => {
+          if (isCollapsed) filter.collapsed.delete(fleet); else filter.collapsed.add(fleet);
+          setTab('dosit-' + dept.toLowerCase());
+        }
+      },
+        el('span', { style: 'font-weight:700' }, isCollapsed ? '▸' : '▾'),
+        el('strong', {}, fleet),
+        el('span', { class: 'muted', style: 'font-size:11.5px' },
+          list.length + ' case(s) · ' + includedCount + ' in SITREP'));
+
+      if (isCollapsed) return el('div', {}, header);
+
+      const rows = list.map(i => {
+        const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+        const cb = el('input', { type: 'checkbox' });
+        cb.checked = i.includeInSitrep !== false;
+        cb.addEventListener('change', () => { i.includeInSitrep = cb.checked; save(); setTab('dosit-' + dept.toLowerCase()); });
+        const v = (i.vessel || 'n/a').toUpperCase();
+        const raw = (i.sitrepLine || i.type || '').trim();
+        const line = raw.toUpperCase().startsWith(v) ? raw : (raw ? v + ' — ' + raw : v);
+        return el('div', { class: 'sitrep-pick-row' },
+          el('label', { style: 'display:flex;align-items:center;gap:4px;cursor:pointer', title: 'Include in CMA SITREP' }, cb),
+          badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+          badge(cls.short, cls.color),
+          el('span', { class: 'ref', style: 'cursor:pointer;text-decoration:underline', onclick: () => incidentForm(i.id) }, i.ref || ''),
+          el('span', { class: 'line' },
+            line,
+            ' ', badge(i.status, i.status === 'closed' ? 'green' : i.status === 'monitoring' ? 'orange' : 'red')));
+      });
+      return el('div', {}, header,
+        el('div', { class: 'sitrep-pick-block', style: 'margin-top:0' }, ...rows));
+    });
 
     const submit = () => {
       state.dutyOfficers[dept] = doName.value;
       state.deptSitreps[dept] = {
-        status: status.value,
-        dossiers: '',
-        deadlines: notesTxt.value,
-        frictions: '',
-        updatedAt: nowISO(),
-        updatedBy: currentUserName() || doName.value
+        status: status.value, dossiers: '', deadlines: '', frictions: '',
+        updatedAt: nowISO(), updatedBy: currentUserName() || doName.value
       };
-      logMEL('DOSIT', `Mon SITREP ${dept} validé par ${state.deptSitreps[dept].updatedBy}`);
-      toast('Bloc ' + dept + ' validé — visible dans le SITREP CMA Ships', 'ok');
-      save();
-      setTab('dosit-' + dept.toLowerCase());
+      logMEL('DOSIT', `My SITREP ${dept} validated by ${state.deptSitreps[dept].updatedBy}`);
+      toast(`Block ${dept} validated — visible in the CMA Ships SITREP`, 'ok');
+      save(); setTab('dosit-' + dept.toLowerCase());
     };
 
     root.appendChild(panel('My SITREP — ' + dept + ' · ' + deptLabel,
       el('div', {},
         el('p', { class: 'muted' },
-          'Duty Officer view ' + dept + '. Set status (G/A/R) and DO name. "Today\'s cases" and "24-72h deadlines" are automatically aggregated from your Cases and Actions tabs. Frictions are consolidated by the Duty Manager in the SITREP CMA tab.'),
+          'Duty Officer view ' + dept + '. All cases of this department, grouped by fleet (foldable). Tick the checkbox to include the case in the CMA Ships SITREP.'),
         twoCol('Department status', status, 'Duty Officer (name)', doName),
 
-        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
-          'Today\'s cases ',
+        el('h4', { style: 'margin:14px 0 4px;font-size:13px;color:var(--accent-2)' }, 'Filter by severity'),
+        el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap' },
+          sevToggle('crit', 'CRIT'), sevToggle('high', 'HIGH'),
+          sevToggle('med',  'MED'),  sevToggle('low',  'LOW')),
+        el('h4', { style: 'margin:14px 0 4px;font-size:13px;color:var(--accent-2)' }, 'Filter by status'),
+        el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap' },
+          statToggle('open', 'OPEN'), statToggle('monitoring', 'MONITORING'),
+          statToggle('closed', 'CLOSED')),
+
+        el('h4', { style: 'margin:14px 0 4px;font-size:13px;color:var(--accent-2)' },
+          'Cases by fleet ',
           el('span', { class: 'muted', style: 'font-weight:normal;font-size:11.5px' },
-            '· auto depuis l\'onglet "Dossiers" (synthèse une-ligne de chaque dossier ouvert ' + dept + ')')),
-        dossiersPreview,
-        el('div', { style: 'margin-top:6px' },
-          el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('incidents') }, '→ Manage my cases')),
-
-        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
-          'Due dates 24-72 h ',
-          el('span', { class: 'muted', style: 'font-weight:normal;font-size:11.5px' }, '· auto from Actions ' + dept)),
-        deadlinesPreview,
-        el('div', { style: 'margin-top:6px' },
-          el('button', { class: 'btn-ghost btn-sm', onclick: () => setTab('actions') }, '→ Manage my actions')),
-
-        el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Additional notes (optional)'),
-        notesTxt,
+            '· ' + allDeptCases.length + ' total · click a fleet header to collapse/expand')),
+        fleetKeys.length === 0
+          ? el('div', { class: 'empty' }, 'No case matches the filters for ' + dept + '.')
+          : el('div', {}, ...fleetBlocks),
 
         d.updatedAt
           ? el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:10px' },
-              'Last validated: ' + fmtDTG(d.updatedAt) + ' · par ' + (d.updatedBy || '—'))
+              'Last validated: ' + fmtDTG(d.updatedAt) + ' · by ' + (d.updatedBy || '—'))
           : el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:10px' }, 'Never validated.'),
         el('div', { class: 'flex', style: 'margin-top:10px' },
-          el('button', { class: 'btn-primary', onclick: submit }, '✓ Validate mon bloc'),
+          el('button', { class: 'btn-primary', onclick: submit }, '✓ Validate my block'),
           el('button', { class: 'btn-ghost', onclick: () => setTab('sitrep') }, '→ CMA Ships SITREP'))
       )
     ));
@@ -2872,7 +2950,8 @@
 
     root.appendChild(panel('CMA Ships SITREP — Duty Manager consolidated',
       el('div', {},
-        el('p', { class: 'muted' }, 'Duty Manager SITREP — distributed to VP + Heads at 08:30 Marseille. Department blocks (status, cases, deadlines) are filled by the Duty Officers in their "My SITREP FM/CR/FU" tabs and consolidated automatically here.'),
+        el('p', { class: 'muted', style: 'font-size:12px' },
+          'Distribution to VP + Heads at 08:30 — consolidates the 3 departmental SITREPs.'),
         twoCol('Week', week, 'Mode', mode),
         field('Duty Manager Marseille', dm),
         field('24h synthesis (30-40 words)', synthesis),
@@ -2948,29 +3027,7 @@
       ));
     }
 
-    // ===== Frictions (DM) — gestion inline =====
-    const fopen = (state.frictions || []).filter(f => f.status !== 'closed');
-    root.appendChild(panel('Active frictions (synthèse Duty Manager)',
-      el('div', {},
-        el('p', { class: 'muted' }, 'Frictions inter-départements ou avec l\'extérieur (clients, shipyards, authorities, Group). Reflected in the "TRANSVERSE FRICTIONS" block and in each department block of the SITREP.'),
-        el('div', { class: 'flex-between', style: 'margin-bottom:10px' },
-          el('div', { class: 'muted' }, fopen.length + ' friction(s) open'),
-          el('button', { class: 'btn-primary btn-sm', onclick: () => frictionForm() }, '+ New friction')
-        ),
-        fopen.length === 0 ? el('div', { class: 'empty' }, 'No active friction.')
-          : tableEl(['Scope', 'Title', 'Owner', 'Note', ''],
-            fopen.map(f => [
-              badge(f.scope, f.scope === 'XX' ? 'orange' : 'blue'),
-              el('strong', {}, f.title), f.owner || '—', f.note || '',
-              el('div', { class: 'flex' },
-                el('button', { class: 'btn-ghost btn-sm', onclick: () => frictionForm(f.id) }, 'Edit'),
-                el('button', { class: 'btn-success btn-sm', onclick: () => { f.status = 'closed'; save(); setTab('sitrep'); } }, '✓'),
-                el('button', { class: 'btn-danger btn-sm', onclick: () => { if (confirm('Delete??')) { state.frictions = state.frictions.filter(x => x.id !== f.id); save(); setTab('sitrep'); } } }, '✕'))
-            ]))
-      )
-    ));
-
-    // ===== Points for Top Management (3 max) =====
+    // ===== Points for Top Management (3 max) — kept condensed =====
     root.appendChild(panel('Points for Top Management (3 max)',
       (() => {
         const items = (state.topMgmtPoints || []);
@@ -2981,48 +3038,18 @@
               state.topMgmtPoints = state.topMgmtPoints.filter(x => x.id !== p.id);
               save(); setTab('sitrep');
             } }, '✕'))));
-        const inp = el('input', { placeholder: 'Nouveau point d\'attention pour le VP avant Group MM' });
+        const inp = el('input', { placeholder: 'For direct VP attention before Group MM' });
         const add = el('button', { class: 'btn-primary btn-sm', onclick: () => {
           if (!inp.value.trim()) return;
           state.topMgmtPoints = state.topMgmtPoints || [];
-          if (state.topMgmtPoints.length >= 3) { toast('3 maximum — supprimez-en un d\'abord.', 'warn'); return; }
+          if (state.topMgmtPoints.length >= 3) { toast('Maximum 3 — remove one first.', 'warn'); return; }
           state.topMgmtPoints.push({ id: id(), label: inp.value.trim(), ts: nowISO() });
           save(); setTab('sitrep');
         } }, '+ Add');
         inp.addEventListener('keydown', e => { if (e.key === 'Enter') add.click(); });
         return el('div', {},
-          el('p', { class: 'muted' }, 'À l\'attention directe du VP avant Group MM — arbitrages, sujets stratégiques, opportunités. Maximum 3.'),
           list,
           el('div', { class: 'flex', style: 'margin-top:8px' }, inp, add));
-      })()
-    ));
-
-    // ===== Signaux faibles / Look-ahead =====
-    root.appendChild(panel('Weak signals Signaux faibles & look-ahead J+1 / S+1 look-ahead D+1 / W+1',
-      (() => {
-        const items = (state.weakSignals || []);
-        const list = el('div', {},
-          ...items.map(s => el('div', { class: 'pb-step' },
-            badge(s.horizon, 'blue'),
-            el('div', { class: 'pb-text' }, ' ' + s.label),
-            el('button', { class: 'btn-danger btn-sm', onclick: () => {
-              state.weakSignals = state.weakSignals.filter(x => x.id !== s.id);
-              save(); setTab('sitrep');
-            } }, '✕'))));
-        const inp = el('input', { placeholder: 'Weak signal or look-ahead…' });
-        const hSel = el('select', {}, el('option', { value: 'J+1' }, 'J+1'), el('option', { value: 'S+1' }, 'S+1'));
-        const add = el('button', { class: 'btn-primary btn-sm', onclick: () => {
-          if (!inp.value.trim()) return;
-          state.weakSignals = state.weakSignals || [];
-          state.weakSignals.push({ id: id(), label: inp.value.trim(), horizon: hSel.value, ts: nowISO() });
-          save(); setTab('sitrep');
-        } }, '+ Add');
-        inp.addEventListener('keydown', e => { if (e.key === 'Enter') add.click(); });
-        return el('div', {},
-          el('p', { class: 'muted' }, 'Trends, weak indicators, anticipated events D+1 or W+1.'),
-          list,
-          el('div', { class: 'form-row cols-3', style: 'margin-top:8px' },
-            el('div', {}, inp), el('div', {}, hSel), el('div', {}, add)));
       })()
     ));
 
@@ -3514,31 +3541,23 @@
 
     root.appendChild(panel('Analytics — cross-axis queries on cases',
       el('div', {},
-        el('p', { class: 'muted' },
-          'Filtrez les dossiers (ouverts + clos) selon les axes disponibles. All les filtres se combinent. Search libre dans la synthèse et la description.'),
-        el('h4', { style: 'margin:8px 0 4px;color:var(--accent-2)' }, 'Period'),
-        el('div', { class: 'form-row cols-3' },
+        el('div', { class: 'form-row cols-4', style: 'margin-bottom:6px' },
           el('div', {}, el('label', {}, 'From'), filterDate('from')),
           el('div', {}, el('label', {}, 'To'), filterDate('to')),
-          el('div', {}, el('label', {}, 'Search libre'), filterInput('text', 'word in summary/description'))),
-
-        el('h4', { style: 'margin:14px 0 4px;color:var(--accent-2)' }, 'Vessel axes'),
-        el('div', { class: 'form-row cols-4' },
-          el('div', {}, el('label', {}, 'Vessel'), filterInput('vessel', 'partial name or IMO')),
+          el('div', {}, el('label', {}, 'Search text'), filterInput('text', 'word in summary/description')),
+          el('div', {}, el('label', {}, 'Vessel'), filterInput('vessel', 'partial name or IMO'))),
+        el('div', { class: 'form-row cols-4', style: 'margin-bottom:6px' },
           el('div', {}, el('label', {}, 'Fleet'), filterSelect('fleet', allFleets, 'All')),
           el('div', {}, el('label', {}, 'Ship Manager'), filterSelect('shipManager', allManagers, 'All')),
-          el('div', {}, el('label', {}, 'Fuel type'), filterSelect('fuelType', allFuels, 'All'))),
-
-        el('h4', { style: 'margin:14px 0 4px;color:var(--accent-2)' }, 'Case axes'),
+          el('div', {}, el('label', {}, 'Fuel type'), filterSelect('fuelType', allFuels, 'All')),
+          el('div', {}, el('label', {}, 'Department'), filterSelect('dept', allDepts, 'All'))),
         el('div', { class: 'form-row cols-4' },
-          el('div', {}, el('label', {}, 'Department'), filterSelect('dept', allDepts, 'All')),
           el('div', {}, el('label', {}, 'Type'), filterSelect('type', allTypes, 'All')),
           el('div', {}, el('label', {}, 'Severity'), filterSelect('severity', allSev, 'All')),
-          el('div', {}, el('label', {}, 'Status'), filterSelect('status', allStatus, 'All'))),
-        el('div', { class: 'form-row cols-2' },
-          el('div', {}, el('label', {}, 'Classification'), filterSelect('classification', allCls, 'All')),
-          el('div', { style: 'align-self:end' }, resetBtn)
-        )
+          el('div', {}, el('label', {}, 'Status'), filterSelect('status', allStatus, 'All')),
+          el('div', { style: 'display:flex;flex-direction:column' },
+            el('label', {}, 'Classification'), filterSelect('classification', allCls, 'All'))),
+        el('div', { style: 'margin-top:8px' }, resetBtn)
       )
     ));
 
@@ -3732,19 +3751,17 @@
     // Current watch
     const w = state.watch || {};
     const officer = el('input', { value: w.officer || '', placeholder: 'DPA-Watch (officer of the watch)', list: 'dl-authors' });
-    const assistant = el('input', { value: w.assistant || '', placeholder: 'Watch Assistant', list: 'dl-authors' });
     const startBtn = el('button', { class: 'btn-primary', onclick: () => {
-      state.watch = { officer: officer.value, assistant: assistant.value, startedAt: nowISO() };
-      logMEL('INFO', `Watch taken by: ${officer.value} (assistant ${assistant.value || '-'})`);
+      state.watch = { officer: officer.value, startedAt: nowISO() };
+      logMEL('INFO', `Watch taken by: ${officer.value}`);
       save(); setTab('veille');
     } }, '⏱ Take the watch');
-    const handoverBtn = el('button', { class: 'btn-ghost', onclick: () => setTab('passation') }, '→ Formal handover');
     root.appendChild(panel('Current watch',
       el('div', {},
-        twoCol('Officer of the watch', officer, 'Assistant', assistant),
+        field('Officer of the watch', officer),
         el('div', { class: 'muted', style: 'font-size:12px' },
           w.startedAt ? `On watch since ${fmtDTG(w.startedAt)}` : 'No active watch.'),
-        el('div', { class: 'flex', style: 'margin-top:10px' }, startBtn, handoverBtn)
+        el('div', { class: 'flex', style: 'margin-top:10px' }, startBtn)
       )
     ));
 
