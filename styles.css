@@ -939,3 +939,57 @@ body.alert-crise .topbar { background: linear-gradient(90deg, #2a0a0f, #5b0d18);
 .dept-status-v { color: var(--ok); }
 .dept-status-a { color: var(--orange); }
 .dept-status-r { color: var(--danger); }
+
+/* Fix : checkboxes et radios doivent être à leur taille naturelle (CSS global input{width:100%} les étirait) */
+input[type="checkbox"], input[type="radio"] {
+  width: auto !important;
+  flex: 0 0 auto;
+  margin: 0 4px 0 0;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+/* Sélection des dossiers à inclure dans le SITREP — meilleur layout */
+.sitrep-pick-block {
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.sitrep-pick-block .pick-dept-head {
+  font-weight: 600;
+  color: var(--accent-2);
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--border);
+}
+.sitrep-pick-row {
+  display: grid;
+  grid-template-columns: 24px 70px 60px 80px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.sitrep-pick-row:last-child { border-bottom: 0; }
+.sitrep-pick-row:hover { background: rgba(255,255,255,0.03); }
+.sitrep-pick-row .ref { font-family: var(--mono); color: var(--muted); font-size: 11px; }
+.sitrep-pick-row .line { color: var(--text); }
+
+.sitrep-pick-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px;
+  background: rgba(58,160,255,.08);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.sitrep-pick-quick {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  margin-bottom: 10px;
+}

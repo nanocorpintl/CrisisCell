@@ -1,37 +1,37 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<!-- Cybersécurité : Content Security Policy stricte, aucun script inline, aucun CDN. -->
+<!-- Cybersecurity: strict Content Security Policy, no inline script, no CDN. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; manifest-src 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex,nofollow,noarchive">
 <meta name="format-detection" content="telephone=no">
 
-<title>CMA Ships — Continuité opérationnelle</title>
+<title>CMA Ships — Operational Continuity</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="locked">
 
 <!-- ================================================================ -->
-<!--   ÉCRAN DE VERROUILLAGE (initialisation, déverrouillage, lock)   -->
+<!--   LOCK SCREEN (setup, unlock)                                    -->
 <!-- ================================================================ -->
 <div id="authOverlay" class="auth-overlay">
   <div class="auth-card">
     <div class="auth-logo">CO</div>
     <h2 class="auth-title">CMA Ships</h2>
-    <p class="auth-sub">Continuité opérationnelle — technique &amp; équipages</p>
+    <p class="auth-sub">Operational Continuity — Technical &amp; Crewing</p>
     <div id="authBody"></div>
     <div class="auth-foot">
-      <span>Chiffrement AES-GCM 256 / PBKDF2 250 000 itérations</span>
+      <span>AES-GCM 256 / PBKDF2 250,000 iterations encryption</span>
     </div>
   </div>
 </div>
 
 <!-- ================================================================ -->
-<!--                          INTERFACE PRINCIPALE                    -->
+<!--                          MAIN UI                                 -->
 <!-- ================================================================ -->
 <div id="appShell" hidden>
 
@@ -40,117 +40,107 @@
     <div class="brand-logo">CO</div>
     <div class="brand-text">
       <div class="brand-title">CMA Ships</div>
-      <div class="brand-sub">Continuité opérationnelle — technique &amp; équipages</div>
+      <div class="brand-sub">Operational Continuity — Technical &amp; Crewing</div>
     </div>
   </div>
   <div class="status-strip">
     <div class="alert-level" id="alertLevel">
       <span class="alert-dot"></span>
-      <select id="alertSelect" aria-label="Mode opérationnel">
-        <option value="nominal">VERT — Nominal</option>
-        <option value="vigilance">AMBRE — Vigilance</option>
-        <option value="crise">ROUGE — Crise</option>
+      <select id="alertSelect" aria-label="Operational mode">
+        <option value="nominal">GREEN — Nominal</option>
+        <option value="vigilance">AMBER — Watch</option>
+        <option value="crise">RED — Crisis</option>
       </select>
     </div>
     <div class="utc-clock"><span class="lbl">UTC</span><span id="utcClock">--:--:--</span></div>
-    <div class="user-chip" id="userChip" title="Utilisateur connecté"></div>
-    <button class="btn-ghost icon-btn" id="lockBtn" title="Verrouiller (Ctrl+L)">🔒</button>
+    <div class="user-chip" id="userChip" title="Logged-in user"></div>
+    <button class="btn-ghost icon-btn" id="langToggleBtn" title="Switch language" style="min-width:48px">EN</button>
+    <button class="btn-ghost icon-btn" id="lockBtn" title="Lock (Ctrl+L)">🔒</button>
     <div class="menu-wrap">
-      <button class="btn-ghost icon-btn" id="menuBtn" title="Plus" aria-haspopup="true">···</button>
+      <button class="btn-ghost icon-btn" id="menuBtn" title="More" aria-haspopup="true">···</button>
       <div class="menu-pop" id="menuPop" hidden>
-        <button id="helpBtn">⌨ Raccourcis (?)</button>
-        <button id="exportData">⬇ Exporter</button>
-        <button id="importData">⬆ Importer</button>
+        <button id="helpBtn">⌨ Shortcuts (?)</button>
+        <button id="exportData">⬇ Export</button>
+        <button id="importData">⬆ Import</button>
         <input type="file" id="importFile" accept=".json" hidden />
-        <button id="changePwdBtn">🔑 Changer le mot de passe</button>
+        <button id="changePwdBtn">🔑 Change password</button>
         <div class="menu-sep"></div>
         <button id="opsPeriodBtn">📅 OPS Period…</button>
         <div class="menu-sep"></div>
-        <button id="resetAll" class="danger">⟲ Tout réinitialiser</button>
+        <button id="resetAll" class="danger">⟲ Reset everything</button>
       </div>
     </div>
   </div>
 </header>
 
 <nav class="tabs" role="tablist">
-  <button class="tab" data-tab="veille">Veille</button>
+  <button class="tab" data-tab="veille">Watch</button>
   <button class="tab active" data-tab="cop">COP</button>
-  <button class="tab" data-tab="dosit-fm">Mon SITREP FM</button>
-  <button class="tab" data-tab="dosit-cr">Mon SITREP CR</button>
-  <button class="tab" data-tab="dosit-fu">Mon SITREP FU</button>
+  <button class="tab" data-tab="dosit-fm">My SITREP FM</button>
+  <button class="tab" data-tab="dosit-cr">My SITREP CR</button>
+  <button class="tab" data-tab="dosit-fu">My SITREP FU</button>
   <button class="tab" data-tab="sitrep">SITREP CMA</button>
-  <button class="tab" data-tab="incidents">Dossiers</button>
-  <button class="tab" data-tab="vessels">Navires</button>
-  <button class="tab" data-tab="analyse">Analyse</button>
+  <button class="tab" data-tab="incidents">Cases</button>
+  <button class="tab" data-tab="vessels">Vessels</button>
+  <button class="tab" data-tab="analyse">Analytics</button>
   <div class="tab-more-wrap">
-    <button class="tab tab-more" id="tabMoreBtn" aria-haspopup="true">Plus <span class="caret">▾</span></button>
+    <button class="tab tab-more" id="tabMoreBtn" aria-haspopup="true">More <span class="caret">▾</span></button>
     <div class="tab-more-pop" id="tabMorePop" hidden>
       <button class="tab-pop" data-tab="mel">Duty Log</button>
-      <button class="tab-pop" data-tab="actions">Actions</button>
-      <button class="tab-pop" data-tab="decisions">Arbitrages</button>
+      <button class="tab-pop" data-tab="rhythm">Rhythm</button>
       <div class="menu-sep"></div>
-      <button class="tab-pop" data-tab="triggers">Critères de déclenchement</button>
-      <button class="tab-pop" data-tab="notif">Modèles d'alerte</button>
-      <button class="tab-pop" data-tab="anticipation">Anticipation</button>
-      <div class="menu-sep"></div>
-      <button class="tab-pop" data-tab="team">Cellule</button>
-      <button class="tab-pop" data-tab="passation">Passation de quart</button>
-      <button class="tab-pop" data-tab="rhythm">Rythme</button>
-      <button class="tab-pop" data-tab="comms">Comms</button>
+      <button class="tab-pop" data-tab="triggers">Trigger criteria</button>
+      <button class="tab-pop" data-tab="notif">Alert templates</button>
       <div class="menu-sep"></div>
       <button class="tab-pop" data-tab="stakeholders">Contacts</button>
-      <button class="tab-pop" data-tab="resources">Ressources</button>
-      <button class="tab-pop" data-tab="risk">Risques</button>
-      <div class="menu-sep"></div>
+      <button class="tab-pop" data-tab="risk">Risks</button>
       <button class="tab-pop" data-tab="playbooks">Playbooks</button>
-      <button class="tab-pop" data-tab="retex">RETEX</button>
-      <button class="tab-pop" data-tab="exercises">Exercices</button>
     </div>
   </div>
 </nav>
 
 <main id="main"></main>
 
-<!-- Floating Action Button — saisie rapide -->
+<!-- Floating Action Button — quick capture -->
 <div id="fab" class="fab" hidden>
-  <button class="fab-main" id="fabMain" title="Action rapide (n)">+</button>
+  <button class="fab-main" id="fabMain" title="Quick action (n)">+</button>
   <div class="fab-menu" id="fabMenu" hidden>
-    <button data-quick="mel" title="Log MEL (l)"><span class="kbd">L</span> Événement (MEL)</button>
-    <button data-quick="action" title="Nouvelle action"><span class="kbd">A</span> Action</button>
-    <button data-quick="decision" title="Nouvelle décision"><span class="kbd">D</span> Décision</button>
-    <button data-quick="comm" title="Nouvelle comm"><span class="kbd">K</span> Comm</button>
-    <button data-quick="incident" title="Nouvel incident"><span class="kbd">I</span> Incident</button>
+    <button data-quick="mel" title="Log Duty Log (l)"><span class="kbd">L</span> Event (Duty Log)</button>
+    <button data-quick="action" title="New action"><span class="kbd">A</span> Action</button>
+    <button data-quick="decision" title="New arbitration"><span class="kbd">D</span> Arbitration</button>
+    <button data-quick="comm" title="New comm"><span class="kbd">K</span> Comm</button>
+    <button data-quick="incident" title="New case"><span class="kbd">I</span> Case</button>
   </div>
 </div>
 
-<!-- Datalists partagées (auto-complétion) -->
+<!-- Shared datalists (autocomplete) -->
 <datalist id="dl-authors"></datalist>
 <datalist id="dl-owners"></datalist>
 <datalist id="dl-channels">
   <option>VHF</option><option>HF</option><option>Inmarsat</option><option>LRIT</option>
-  <option>Téléphone</option><option>Email</option><option>SSAS</option><option>Sat-C</option>
+  <option>Phone</option><option>Email</option><option>SSAS</option><option>Sat-C</option>
   <option>Telegram</option><option>Press</option>
 </datalist>
 <datalist id="dl-parties"></datalist>
 <datalist id="dl-vessels"></datalist>
 
-<!-- Modal générique -->
+<!-- Generic modal -->
 <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
   <div class="modal-card">
     <div class="modal-header">
-      <h3 id="modalTitle">Titre</h3>
-      <button class="btn-ghost" id="modalClose" aria-label="Fermer">✕</button>
+      <h3 id="modalTitle">Title</h3>
+      <button class="btn-ghost" id="modalClose" aria-label="Close">✕</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
   </div>
 </div>
 
-<!-- Aide raccourcis -->
+<!-- Shortcuts help -->
 <div id="helpModal" class="modal hidden" role="dialog" aria-modal="true">
   <div class="modal-card">
     <div class="modal-header">
-      <h3>Raccourcis clavier</h3>
-      <button class="btn-ghost" id="helpClose" aria-label="Fermer">✕</button>
+      <h3>Keyboard shortcuts</h3>
+      <button class="btn-ghost" id="helpClose" aria-label="Close">✕</button>
     </div>
     <div class="modal-body">
       <div class="grid-2">
@@ -158,45 +148,45 @@
           <h4>Navigation</h4>
           <table class="kbd-table">
             <tr><td><span class="kbd">G</span> <span class="kbd">C</span></td><td>COP</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">I</span></td><td>Incidents</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">V</span></td><td>Navires</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">1</span></td><td>Mon SITREP FM</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">2</span></td><td>Mon SITREP CR</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">3</span></td><td>Mon SITREP FU</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">Y</span></td><td>Analyse</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">I</span></td><td>Cases</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">V</span></td><td>Vessels</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">1</span></td><td>My SITREP FM</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">2</span></td><td>My SITREP CR</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">3</span></td><td>My SITREP FU</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">M</span></td><td>Duty Log</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">A</span></td><td>Actions</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">D</span></td><td>Arbitrages</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">D</span></td><td>Arbitrations</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">K</span></td><td>Comms</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">H</span></td><td>Contacts</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">R</span></td><td>Risques</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">B</span></td><td>Battle rhythm</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">R</span></td><td>Risks</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">B</span></td><td>Rhythm</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">S</span></td><td>SITREP</td></tr>
             <tr><td><span class="kbd">G</span> <span class="kbd">L</span></td><td>Playbooks</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">T</span></td><td>Cellule</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">W</span></td><td>Veille (MOC)</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">Q</span></td><td>Critères de déclenchement</td></tr>
-            <tr><td><span class="kbd">G</span> <span class="kbd">F</span></td><td>Modèles d'alerte</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">T</span></td><td>Cell</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">W</span></td><td>Watch (MOC)</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">Y</span></td><td>Analytics</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">Q</span></td><td>Trigger criteria</td></tr>
+            <tr><td><span class="kbd">G</span> <span class="kbd">F</span></td><td>Alert templates</td></tr>
           </table>
         </div>
         <div>
-          <h4>Saisie rapide</h4>
+          <h4>Quick capture</h4>
           <table class="kbd-table">
-            <tr><td><span class="kbd">N</span></td><td>Nouveau (selon onglet)</td></tr>
-            <tr><td><span class="kbd">L</span></td><td>Log MEL rapide</td></tr>
-            <tr><td><span class="kbd">A</span></td><td>Nouvelle action</td></tr>
-            <tr><td><span class="kbd">D</span></td><td>Nouvelle décision</td></tr>
-            <tr><td><span class="kbd">K</span></td><td>Nouvelle comm</td></tr>
-            <tr><td><span class="kbd">I</span></td><td>Nouvel incident</td></tr>
+            <tr><td><span class="kbd">N</span></td><td>New (tab-dependent)</td></tr>
+            <tr><td><span class="kbd">L</span></td><td>Quick Duty Log entry</td></tr>
+            <tr><td><span class="kbd">A</span></td><td>New action</td></tr>
+            <tr><td><span class="kbd">D</span></td><td>New arbitration</td></tr>
+            <tr><td><span class="kbd">K</span></td><td>New comm</td></tr>
+            <tr><td><span class="kbd">I</span></td><td>New case</td></tr>
             <tr><td><span class="kbd">S</span></td><td>SITREP</td></tr>
-            <tr><td><span class="kbd">?</span></td><td>Cette aide</td></tr>
+            <tr><td><span class="kbd">?</span></td><td>This help</td></tr>
           </table>
-          <h4 style="margin-top:14px">Édition</h4>
+          <h4 style="margin-top:14px">Editing</h4>
           <table class="kbd-table">
-            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">Entrée</span></td><td>Valider formulaire</td></tr>
-            <tr><td><span class="kbd">Esc</span></td><td>Fermer / annuler</td></tr>
-            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">L</span></td><td>Verrouiller</td></tr>
-            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">K</span></td><td>Recherche globale</td></tr>
+            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">Enter</span></td><td>Submit form</td></tr>
+            <tr><td><span class="kbd">Esc</span></td><td>Close / cancel</td></tr>
+            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">L</span></td><td>Lock</td></tr>
+            <tr><td><span class="kbd">Ctrl</span>+<span class="kbd">K</span></td><td>Global search</td></tr>
           </table>
         </div>
       </div>
@@ -205,8 +195,8 @@
 </div>
 
 <footer class="footer">
-  <span>CMA Ships · Continuité opérationnelle · périmètre hors SSE</span>
-  <span id="storageStatus">🔐 Données chiffrées localement</span>
+  <span>CMA Ships · Operational Continuity · outside SSE scope</span>
+  <span id="storageStatus">🔐 Data encrypted locally</span>
 </footer>
 
 </div><!-- /#appShell -->

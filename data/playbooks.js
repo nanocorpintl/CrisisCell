@@ -1,146 +1,146 @@
-// CMA Ships — Continuité opérationnelle (disponibilité technique & équipages).
-// Référentiel doctrinal CMA Ships : Note d'organisation, Fonctionnement
-// quotidien/hebdomadaire, JDs Duty Manager / Duty Officer, trame SITREP.
+// CMA Ships — Operational continuity (technical & crew availability).
+// Doctrinal reference : Organization Note, Daily/Weekly Operations,
+// Duty Manager / Duty Officer JDs, SITREP template.
 //
-// Périmètre : disponibilité technique des navires (FM), disponibilité équipage
-// (Crewing), avancement chantiers (Fleet Upgrade). La sécurité, la sûreté et
-// l'environnement (SSE) sont du ressort de l'outil SSE de CMA Ships et ne
-// figurent PAS ici.
+// Scope: technical vessel availability (FM), crew availability (Crewing),
+// shipyard project progress (Fleet Upgrade). Safety, security and
+// environment (SSE) are managed by the dedicated SSE tool and are NOT
+// covered here.
 
 // ============================================================
-//   PLAYBOOKS TECHNIQUES & CREWING
+//   TECHNICAL & CREWING PLAYBOOKS
 // ============================================================
 window.PLAYBOOKS = [
   {
     id: 'pb-me-failure',
-    title: 'Avarie machine principale (M/E)',
+    title: 'Main engine (M/E) failure',
     severity: 'crit',
     refs: ['Class society manual', 'ISM', 'Charter party'],
     steps: [
-      'Stopper / réduire allure selon recommandation Chef',
-      'Diagnostic Chef + remontée FM (Smartship, photos, paramètres)',
-      'Notifier Head of Fleet Management + DO FM (Singapour)',
-      'Notifier société de classification (LR/BV/NK/DNV/CCS) — class on-call',
-      'Évaluer pertinence d\'un PAN-PAN (à arbitrer avec capitaine — SSE si requis)',
-      'Estimer ETD repair (heure pièce, ETA pièce, intervention shore team)',
-      'Coordination affréteur / clients via FM — préparer Letter Of Protest',
-      'Évaluer reroutage / port refuge ou drydock non planifié',
-      'Notifier P&I et H&M si dommage majeur ou pertes commerciales',
-      'Documenter pour SITREP — alimenter Frictions actives FM'
+      'Stop / reduce speed per Chief Engineer recommendation',
+      'Diagnose with Chief + report to FM (Smartship, photos, parameters)',
+      'Notify Head of Fleet Management + DO FM (Singapore)',
+      'Notify classification society (LR/BV/NK/DNV/CCS) — class on-call',
+      'Evaluate need for PAN-PAN call (master to decide — SSE if required)',
+      'Estimate ETD for repair (part lead time, ETA part, shore team availability)',
+      'Coordinate charterer / clients via FM — prepare Letter Of Protest',
+      'Assess rerouting / port of refuge or unplanned drydock',
+      'Notify P&I and H&M if major damage or commercial loss',
+      'Document for SITREP — feed Frictions block under FM'
     ]
   },
   {
     id: 'pb-ae-failure',
-    title: 'Avarie auxiliaire (A/E) — centrale électrique',
+    title: 'Auxiliary engine (A/E) — power generation',
     severity: 'high',
     refs: ['Class society manual', 'ISM'],
     steps: [
-      'Identifier A/E concerné, isoler défaut, basculer charge',
-      'Vérifier capacité reefer + hotel load restante',
-      'Limiter le nombre de prises reefer si nécessaire (LOP au chargeur)',
-      'Notifier Head FM + DO FM, planifier intervention shore team',
-      'Logistique pièce détachée : ETA, dédouanement, transit',
-      'Évaluer impact port suivant (reefer cut-off, énergie quai)',
-      'Coordination commerciale via FM — affréteurs et clients reefer',
-      'Inscription Friction à signaler bloc FM du SITREP'
+      'Identify affected A/E, isolate fault, transfer load',
+      'Verify remaining reefer + hotel load capacity',
+      'Limit reefer plug count if necessary (LOP to shipper)',
+      'Notify Head FM + DO FM, schedule shore team intervention',
+      'Spare part logistics: ETA, customs clearance, transit',
+      'Assess impact on next port (reefer cut-off, shore power)',
+      'Commercial coordination via FM — charterers and reefer clients',
+      'Add Friction to FM block of the SITREP'
     ]
   },
   {
     id: 'pb-propulsion',
-    title: 'Avarie propulsion (CPP, ligne d\'arbre, gouvernail)',
+    title: 'Propulsion failure (CPP, shaft line, rudder)',
     severity: 'crit',
     refs: ['Class society manual', 'IMO Resolution A.852(20)'],
     steps: [
-      'Stop machine, position safe, ancrage si possible',
-      'Diagnostic structurel — ligne d\'arbre, palier, CPP hub',
-      'Class society on-call obligatoire',
-      'Évaluer dérive — coordination remorquage (LOF Lloyd\'s Open Form ?)',
-      'Notifier Head FM + DO FM, escalade DM Marseille',
-      'Fenêtre drydock — coordination FU + Cosco/Shanghai',
-      'Notifier P&I, H&M, affréteur',
-      'Plan B logistique : transbordement, lightering, port refuge',
-      'Friction à signaler FM + transverse FU si chantier requis'
+      'Stop engine, safe position, anchor if possible',
+      'Structural diagnostic — shaft line, bearing, CPP hub',
+      'Mandatory class society on-call',
+      'Assess drift — coordinate towage (LOF Lloyd\'s Open Form?)',
+      'Notify Head FM + DO FM, escalate to DM Marseille',
+      'Drydock window — coordinate with FU + Cosco/Shanghai',
+      'Notify P&I, H&M, charterer',
+      'Plan B logistics: transhipment, lightering, port of refuge',
+      'Friction in FM block + transverse to FU if shipyard required'
     ]
   },
   {
     id: 'pb-drydock-unplanned',
-    title: 'Drydock non planifié / docking d\'urgence',
+    title: 'Unplanned drydock / emergency docking',
     severity: 'high',
     refs: ['Class society manual', 'Charter party'],
     steps: [
-      'Identifier chantier disponible (Cosco Zhoushan, Shanghai, alternatives)',
-      'Coordination Head FU + DO FU (Chine) — slot availability',
-      'Estimation durée + coût (vs budget non planifié)',
-      'Logistique cargaison : transbordement, déroutage',
-      'Equipage : permis, immigration, relèves anticipées si long',
-      'Class society : programme inspection + survey',
-      'Notifier affréteurs, ajuster schedule',
-      'Friction transverse : FM ↔ FU sur slot et séquencement',
-      'Bloc Échéances 24-72 h FU du SITREP'
+      'Identify available shipyard (Cosco Zhoushan, Shanghai, alternatives)',
+      'Coordinate Head FU + DO FU (China) — slot availability',
+      'Estimate duration + cost (vs unplanned budget)',
+      'Cargo logistics: transhipment, deviation',
+      'Crew: permits, immigration, early reliefs if long stop',
+      'Class society: inspection program + survey',
+      'Notify charterers, adjust schedule',
+      'Transverse friction: FM ↔ FU on slot and sequencing',
+      'Add to "24-72h deadlines" FU block of the SITREP'
     ]
   },
   {
     id: 'pb-retrofit',
     title: 'Retrofit / Phase-in / Phase-out',
     severity: 'med',
-    refs: ['Project plan FU', 'Class society', 'Charter party'],
+    refs: ['FU project plan', 'Class society', 'Charter party'],
     steps: [
-      'Validation calendrier Cosco Zhoushan / Shanghai avec DO FU',
-      'Suivi Pareto sur livraison (revue à J-8 avant delivery)',
-      'Vérifier bunker readiness (LNG, méthanol, dual-fuel)',
+      'Validate Cosco Zhoushan / Shanghai schedule with DO FU',
+      'Pareto follow-up on delivery (review at D-8 before delivery)',
+      'Check bunker readiness (LNG, methanol, dual-fuel)',
       'Sea trial planning + class attendance',
-      'Coordination Crewing pour équipage de phase-in',
-      'Préparation cérémonie / press si phase-in officielle',
-      'Phase-out : décharge cargo, équipage relevé, documents transferts',
-      'Inscription dossier du jour bloc FU du SITREP'
+      'Crewing coordination for phase-in crew',
+      'Ceremony / press preparation if official phase-in',
+      'Phase-out: cargo discharge, crew off-signed, document transfer',
+      'Add to "Today\'s cases" FU block of the SITREP'
     ]
   },
   {
     id: 'pb-psc-detention',
-    title: 'Détention PSC (Port State Control)',
+    title: 'Port State Control detention',
     severity: 'high',
     refs: ['Paris MoU / Tokyo MoU', 'SOLAS / MLC', 'Class society'],
     steps: [
-      'Récupérer rapport PSC détaillé — déficiences listées',
-      'Notifier Head FM + DO FM + DM Marseille',
-      'Plan d\'action correctif item par item',
-      'Class society / Recognized Organization pour vérification',
-      'Notifier État du pavillon',
-      'Coordination Crewing si déficience manning ou cert STCW',
-      'Estimer durée + coût de libération',
-      'Communication affréteurs et clients — délai escale',
-      'Friction à signaler bloc FM + impact rotation transverse'
+      'Get detailed PSC report — list of deficiencies',
+      'Notify Head FM + DO FM + DM Marseille',
+      'Item-by-item corrective action plan',
+      'Class society / Recognized Organization for verification',
+      'Notify Flag State',
+      'Coordinate with Crewing if manning or STCW deficiency',
+      'Estimate duration + release cost',
+      'Communicate to charterers and clients — port call delay',
+      'Add Friction to FM block + transverse rotation impact'
     ]
   },
   {
     id: 'pb-bunker',
-    title: 'Soutage défaillant (qualité ou délai)',
+    title: 'Faulty bunkering (quality or delay)',
     severity: 'med',
     refs: ['ISO 8217', 'MARPOL Annex VI', 'Charter party'],
     steps: [
-      'Suspendre soutage / consommation produit suspect',
-      'Échantillonnage normalisé + envoi laboratoire',
-      'Letter Of Protest (LOP) au fournisseur',
-      'Évaluer impact opérationnel : autonomie, prochain port soutable',
-      'Coordination FM + Procurement bunker',
-      'Re-bunker alternatif — coût + délai',
-      'Notifier affréteur si retard significatif',
-      'Bunker supplier monitoring → Signal faible SITREP si récurrent'
+      'Suspend bunkering / consumption of suspect product',
+      'Normalised sampling + send to laboratory',
+      'Letter Of Protest (LOP) to supplier',
+      'Assess operational impact: autonomy, next bunker-capable port',
+      'Coordinate FM + Bunker procurement',
+      'Alternative re-bunker — cost + delay',
+      'Notify charterer if significant delay',
+      'Bunker supplier monitoring → Weak signal in SITREP if recurring'
     ]
   },
   {
     id: 'pb-cargo-damage',
-    title: 'Avarie cargaison / dommage matériel',
+    title: 'Cargo damage / material loss',
     severity: 'med',
     refs: ['Charter party', 'CTU Code', 'Hague-Visby Rules'],
     steps: [
-      'Localiser conteneur(s) impacté(s) — bay/row/tier',
-      'Photo + vidéo horodatées, témoignages',
-      'Letter Of Protest immédiate',
-      'Notifier P&I + assurance cargaison',
-      'Coordination FM + commercial',
-      'Si reefer : chaîne thermique + claims',
-      'Documentation pour SITREP — bloc FM, friction transverse si client clé'
+      'Locate affected container(s) — bay/row/tier',
+      'Time-stamped photos + videos, witness statements',
+      'Immediate Letter Of Protest',
+      'Notify P&I + cargo insurer',
+      'Coordinate FM + commercial',
+      'If reefer: cold chain log + claims',
+      'Documentation for SITREP — FM block, transverse friction if key client'
     ]
   },
   {
@@ -149,436 +149,437 @@ window.PLAYBOOKS = [
     severity: 'high',
     refs: ['MLC 2006', 'STCW', 'Flag SDOC'],
     steps: [
-      'Identifier postes vacants (officiers/ratings, fonctions critiques)',
-      'Notifier Head Crewing + DO Crewing (Singapour)',
-      'Évaluer risque non-conformité Minimum Safe Manning (SDOC)',
-      'Coordination agents manning (Manille, agents Asie)',
-      'Logistique relève : vols, visas, hôtels, transport portuaire',
-      'Plan B : embarquement officier siège, prolongation contrat',
-      'Notifier capitaine + bord de l\'état du remplacement',
-      'Bloc Échéances 24-72 h Crewing du SITREP'
+      'Identify vacant positions (officers/ratings, critical functions)',
+      'Notify Head Crewing + DO Crewing (Singapore)',
+      'Assess Minimum Safe Manning compliance risk (SDOC)',
+      'Coordinate manning agents (Manila, Asia agents)',
+      'Relief logistics: flights, visas, hotels, port transport',
+      'Plan B: HQ officer embarkation, contract extension',
+      'Inform master + ship of replacement progress',
+      'Add to "24-72h deadlines" Crewing block of the SITREP'
     ]
   },
   {
     id: 'pb-medevac-crewing',
-    title: 'MEDEVAC — impact opérationnel équipage',
+    title: 'MEDEVAC — crewing operational impact',
     severity: 'high',
     refs: ['MLC 2006', 'P&I'],
     steps: [
-      'Coordination SSE (médicale) → Crewing prend le relais opérationnel',
-      'Identifier poste vacant suite évacuation — niveau Minimum Safe Manning',
-      'Préparer remplaçant : vol, visa, brief',
-      'Logistique transport port suivant',
-      'Documentation P&I, charter party, claims salaire',
-      'Notifier capitaine de la chaîne de remplacement',
-      'Inscription dossier du jour bloc Crewing'
+      'SSE (medical) coordinates → Crewing takes the operational follow-up',
+      'Identify the vacant post after evacuation — Minimum Safe Manning check',
+      'Prepare replacement: flight, visa, briefing',
+      'Transport logistics next port',
+      'P&I, charter party, salary claims documentation',
+      'Inform master of the replacement chain',
+      'Add to "Today\'s cases" Crewing block'
     ]
   },
   {
     id: 'pb-certification',
-    title: 'Certification équipage / formation — expiration',
+    title: 'Crew certification / training — expiry',
     severity: 'med',
     refs: ['STCW', 'MLC 2006', 'CII / BV training'],
     steps: [
-      'Identifier marin + certificat en limite (STCW, médicale, GMDSS)',
-      'Plan : formation rapide ou relève',
-      'Coordination Crewing + agents Manille / Asie',
-      'Vérifier équivalence Flag State si renouvellement urgent',
-      'Préparer dossier audit POEA / agences si applicable',
-      'Notifier capitaine, Minimum Safe Manning à confirmer',
-      'Inscription Échéances bloc Crewing'
+      'Identify the seafarer + nearly-expiring certificate (STCW, medical, GMDSS)',
+      'Plan: fast-track training or relief',
+      'Coordinate Crewing + Manila / Asia agents',
+      'Verify Flag State equivalence if urgent renewal needed',
+      'Prepare POEA audit / agency dossier if applicable',
+      'Inform master, confirm Minimum Safe Manning',
+      'Add to "24-72h deadlines" Crewing block'
     ]
   },
   {
     id: 'pb-vetting',
-    title: 'Vetting — préparation / suite à observations',
+    title: 'Vetting — preparation / observation follow-up',
     severity: 'med',
-    refs: ['OCIMF SIRE', 'CDI', 'Client oil major'],
+    refs: ['OCIMF SIRE', 'CDI', 'Oil major client'],
     steps: [
-      'Calendrier pré-inspection — préparation FM + équipage',
-      'Brief capitaine + chef sur observations historiques',
-      'Vérifier documentation : SMS, manuels, cert. à jour',
-      'Si rapport vetting : plan correctif par observation',
-      'Coordination FM ↔ commercial pour information client',
-      'Suivi cycle vetting prochain port',
-      'Inscription bloc FM SITREP si vetting clé pour rotation'
+      'Pre-inspection schedule — FM + crew preparation',
+      'Brief master + Chief on historical observations',
+      'Verify documentation: SMS, manuals, up-to-date certificates',
+      'If vetting report: per-observation corrective plan',
+      'FM ↔ commercial coordination for client information',
+      'Track next vetting cycle next port',
+      'Add to FM SITREP block if vetting key for rotation'
     ]
   }
 ];
 
 // ============================================================
-//   ORGANISATION CMA SHIPS
+//   CMA SHIPS ORGANIZATION
 // ============================================================
-// VP + 3 Heads + couche de permanence (1 DM Marseille + 3 DO Asie).
-// Voir Note d'organisation CMA Ships.
+// VP + 3 Heads + permanence layer (1 DM Marseille + 3 DOs Asia).
+// See CMA Ships Organization Note.
 window.ROLES = [
   { code: 'VP',   name: 'Vice-President CMA Ships',
-    desc: 'Stratégique : Group MM hebdo, relations Groupe, autorité ultime sur arbitrages structurants.' },
+    desc: 'Strategic: weekly Group MM, Group relations, ultimate authority on structural decisions.' },
   { code: 'HFM',  name: 'Head of Fleet Management',
-    desc: 'Hiérarchique équipe FM, décisions structurantes département (technique, exploitation flotte).' },
+    desc: 'Line manager of the FM team, structural decisions for the department (technical, fleet operations).' },
   { code: 'HCR',  name: 'Head of Crewing',
-    desc: 'Hiérarchique équipe Crewing, décisions structurantes département (équipages, agences).' },
+    desc: 'Line manager of the Crewing team, structural decisions for the department (crews, agencies).' },
   { code: 'HFU',  name: 'Head of Fleet Upgrade',
-    desc: 'Hiérarchique équipe FU, décisions structurantes département (retrofits, chantiers).' },
+    desc: 'Line manager of the FU team, structural decisions for the department (retrofits, shipyards).' },
   { code: 'DM',   name: 'Duty Manager Marseille',
-    desc: 'Couche permanence — rotation hebdo. Anime Daily 09:00, consolide SITREP, tient Duty Log, escalade au VP.' },
-  { code: 'DOFM', name: 'Duty Officer FM — Singapour HO',
-    desc: 'Permanence FM Asie-Pacifique (rotation hebdo). Produit SITREP départemental FM, monitoring nuit Europe.' },
-  { code: 'DOCR', name: 'Duty Officer Crewing — Singapour HO',
-    desc: 'Permanence Crewing Asie-Pacifique. Suit relèves, certifications, agents Manille/Asie.' },
-  { code: 'DOFU', name: 'Duty Officer Fleet Upgrade — Chine',
-    desc: 'Permanence FU (Cosco Zhoushan, Shanghai). Project Managers sur sites — suivi chantiers temps réel.' }
+    desc: 'Permanence layer — weekly rotation. Animates the 09:00 Daily, consolidates the SITREP, maintains the Duty Log, escalates to VP.' },
+  { code: 'DOFM', name: 'Duty Officer FM — Singapore HO',
+    desc: 'FM permanence in Asia-Pacific (weekly rotation). Produces the FM departmental SITREP, monitors during European night.' },
+  { code: 'DOCR', name: 'Duty Officer Crewing — Singapore HO',
+    desc: 'Crewing permanence in Asia-Pacific. Follows reliefs, certifications, Manila/Asia agents.' },
+  { code: 'DOFU', name: 'Duty Officer Fleet Upgrade — China',
+    desc: 'FU permanence (Cosco Zhoushan, Shanghai). On-site Project Managers — real-time shipyard follow-up.' }
 ];
 
-// Les 3 départements core business CMA Ships.
+// The 3 core business departments at CMA Ships.
 window.DEPARTMENTS = [
-  { code: 'FM', label: 'Fleet Management',  doLocation: 'Singapour HO',          headRole: 'HFM', doRole: 'DOFM' },
-  { code: 'CR', label: 'Crewing',           doLocation: 'Singapour HO',          headRole: 'HCR', doRole: 'DOCR' },
-  { code: 'FU', label: 'Fleet Upgrade',     doLocation: 'Chine — site',          headRole: 'HFU', doRole: 'DOFU' },
-  { code: 'XX', label: 'Transverse / autre', doLocation: '',                     headRole: '',    doRole: '' }
+  { code: 'FM', label: 'Fleet Management',  doLocation: 'Singapore HO',     headRole: 'HFM', doRole: 'DOFM' },
+  { code: 'CR', label: 'Crewing',           doLocation: 'Singapore HO',     headRole: 'HCR', doRole: 'DOCR' },
+  { code: 'FU', label: 'Fleet Upgrade',     doLocation: 'China — on-site',  headRole: 'HFU', doRole: 'DOFU' },
+  { code: 'XX', label: 'Transverse / other', doLocation: '',                 headRole: '',    doRole: '' }
 ];
 
-// Modes opérationnels CMA Ships — pilotage par exception.
+// Operational modes — pilotage by exception.
 window.MODES = [
-  { code: 'nominal',   label: 'Nominal',   statut: 'VERT',  color: 'green',
-    desc: 'Fonctionnement courant — pilotage par exception, dispositif standard (Daily 09:00, SITREP 08:30).' },
-  { code: 'vigilance', label: 'Vigilance', statut: 'AMBRE', color: 'amber',
-    desc: 'Friction technique ou crewing majeure — renforcement, HoD informés, suivi rapproché.' },
-  { code: 'crise',     label: 'Crise',     statut: 'ROUGE', color: 'red',
-    desc: 'Dispositif normal suspendu — cellule technique activée par le VP, escalade Groupe si pertinent.' }
+  { code: 'nominal',   label: 'Nominal',   statut: 'GREEN', color: 'green',
+    desc: 'Routine operation — pilotage by exception, standard setup (Daily 09:00, SITREP 08:30).' },
+  { code: 'vigilance', label: 'Watch',     statut: 'AMBER', color: 'amber',
+    desc: 'Major technical or crewing friction — reinforcement, HoDs informed, close follow-up.' },
+  { code: 'crise',     label: 'Crisis',    statut: 'RED',   color: 'red',
+    desc: 'Normal setup suspended — technical crisis cell activated by the VP, Group escalation if relevant.' }
 ];
 
-// SITREP CMA Ships — trame officielle.
+// CMA Ships SITREP — official template.
 window.SITREP_CMA_TEMPLATE = `╔══════════════════════════════════════════════════════════════╗
 ║                    CMA SHIPS — SITREP                        ║
 ╚══════════════════════════════════════════════════════════════╝
-{DAY}   ·   Semaine {WEEK}
-Duty Manager Marseille : {DM_NAME}
-Mode : {MODE}
+{DAY}   ·   Week {WEEK}
+Duty Manager Marseille: {DM_NAME}
+Mode: {MODE}
 
-──── STATUT GLOBAL : {STATUT} ────
-Classification dossiers ouverts : {CLASSIFICATION_SUMMARY}
+──── GLOBAL STATUS: {STATUT} ────
+Open cases classification: {CLASSIFICATION_SUMMARY}
 
-▸ SYNTHÈSE 24 h
+▸ 24h SYNTHESIS
 {SYNTHESIS}
 
 ▸ KPIs
-  • Alertes 24 h                            : {ALERTS_24H}
-  • Off-hire estimé en cours (h)            : {OFFHIRE_HOURS}
-       — FM : {OFFHIRE_FM} h · CR : {OFFHIRE_CR} h · FU : {OFFHIRE_FU} h
-  • Risque off-hire de la semaine (nouveau) : {OFFHIRE_WEEK} h
-  • Off-hire YTD réalisé                    : {OFFHIRE_YTD} h
-  • Objectif YTD (99,5% × {N_VESSELS} navires)            : {OFFHIRE_TARGET} h
-  • YTD vs objectif                         : {OFFHIRE_RATIO} %
+  • 24h Alerts                              : {ALERTS_24H}
+  • Estimated open off-hire (h)             : {OFFHIRE_HOURS}
+       — FM: {OFFHIRE_FM} h · CR: {OFFHIRE_CR} h · FU: {OFFHIRE_FU} h
+  • New off-hire risk this week (h)         : {OFFHIRE_WEEK}
+  • YTD actual off-hire                     : {OFFHIRE_YTD} h
+  • YTD target (99.5% × {N_VESSELS} vessels)            : {OFFHIRE_TARGET} h
+  • YTD vs target                           : {OFFHIRE_RATIO} %
 
-◆ POINTS POUR TOP MANAGEMENT
-  À l'attention directe du VP avant Group MM
+◆ POINTS FOR TOP MANAGEMENT
+  Direct attention of the VP before Group MM
 {TOP_MGMT_POINTS}
 
 ────────────────────────────────────────────────────────────────
-  FLEET MANAGEMENT                            Statut [{FM_STATUS}]
-  Duty Officer (Singapour HO) — {DO_FM}
+  FLEET MANAGEMENT                            Status [{FM_STATUS}]
+  Duty Officer (Singapore HO) — {DO_FM}
 ────────────────────────────────────────────────────────────────
-Dossiers du jour
+Today's cases
 {FM_DOSSIERS}
 
-Échéances 24-72 h
+24-72 h deadlines
 {FM_DEADLINES}
 
-Frictions à signaler
+Frictions to report
 {FM_FRICTIONS}
 
 ────────────────────────────────────────────────────────────────
-  CREWING                                     Statut [{CR_STATUS}]
-  Duty Officer (Singapour HO) — {DO_CR}
+  CREWING                                     Status [{CR_STATUS}]
+  Duty Officer (Singapore HO) — {DO_CR}
 ────────────────────────────────────────────────────────────────
-Dossiers du jour
+Today's cases
 {CR_DOSSIERS}
 
-Échéances 24-72 h
+24-72 h deadlines
 {CR_DEADLINES}
 
-Frictions à signaler
+Frictions to report
 {CR_FRICTIONS}
 
 ────────────────────────────────────────────────────────────────
-  FLEET UPGRADE                               Statut [{FU_STATUS}]
-  Duty Officer (Chine — site) — {DO_FU}
+  FLEET UPGRADE                               Status [{FU_STATUS}]
+  Duty Officer (China — on-site) — {DO_FU}
 ────────────────────────────────────────────────────────────────
-Dossiers du jour
+Today's cases
 {FU_DOSSIERS}
 
-Échéances 24-72 h
+24-72 h deadlines
 {FU_DEADLINES}
 
-Frictions à signaler
+Frictions to report
 {FU_FRICTIONS}
 
 ════════════════════════════════════════════════════════════════
-  FRICTIONS TRANSVERSES
+  TRANSVERSE FRICTIONS
 ════════════════════════════════════════════════════════════════
 {TRANSVERSE_FRICTIONS}
 
 ════════════════════════════════════════════════════════════════
-  SIGNAUX FAIBLES / LOOK-AHEAD  J+1 / S+1
+  WEAK SIGNALS / LOOK-AHEAD  D+1 / W+1
 ════════════════════════════════════════════════════════════════
 {WEAK_SIGNALS}
 `;
 
-// Niveaux de classification des dossiers — du plus restreint au plus ouvert.
-window.CLASSIFICATIONS = [
-  { code: 'CONFIDENTIAL', label: 'CONFIDENTIAL', short: 'CONF', color: 'red',
-    desc: 'Diffusion strictement contrôlée — VP, Heads, légal, P&I. Pas de diffusion externe.' },
-  { code: 'RESTRICTED',   label: 'RESTRICTED',   short: 'REST', color: 'orange',
-    desc: 'Diffusion restreinte — cellule de crise, autorités si requis, classification, P&I.' },
-  { code: 'INTERNAL',     label: 'INTERNAL',     short: 'INT',  color: 'blue',
-    desc: 'Diffusion interne CMA Ships — pilotage opérationnel courant.' },
-  { code: 'PUBLIC',       label: 'PUBLIC',       short: 'PUB',  color: 'green',
-    desc: 'Information sans restriction — peut être diffusée à l\'extérieur.' }
-];
-
-// Conservé pour compat ascendante des triggers : alias vers MODES.
+// Kept for backward compatibility with triggers: alias to MODES.
 window.POSTURES = window.MODES;
 
 // ============================================================
-//   AAR — After-Action Review (RETEX, US Army FM 6-22)
+//   AAR — After-Action Review (US Army FM 6-22)
 // ============================================================
 window.AAR_QUESTIONS = [
-  { code: 'expected', label: 'Que devait-il se passer ?',
-    hint: 'Plan initial, attendu, échéances prévues' },
-  { code: 'actual', label: 'Que s\'est-il passé ?',
-    hint: 'Faits, chronologie réelle, décisions prises' },
-  { code: 'gap', label: 'Pourquoi y a-t-il une différence ?',
-    hint: 'Causes racines, contraintes, surprises, frictions' },
-  { code: 'improve', label: 'Que devons-nous améliorer / pérenniser ?',
+  { code: 'expected', label: 'What was supposed to happen?',
+    hint: 'Initial plan, expected outcome, planned deadlines' },
+  { code: 'actual', label: 'What actually happened?',
+    hint: 'Facts, real timeline, decisions taken' },
+  { code: 'gap', label: 'Why is there a difference?',
+    hint: 'Root causes, constraints, surprises, frictions' },
+  { code: 'improve', label: 'What should we improve / sustain?',
     hint: 'Lessons Identified → Lessons Learned' }
 ];
 
 // ============================================================
-//   PASSATION DUTY MANAGER — checklist hebdomadaire
-//   45 min, mardi matin (cf. JD Duty Manager)
+//   DUTY MANAGER HANDOVER — weekly checklist
+//   45 min, Tuesday morning (cf. Duty Manager JD)
 // ============================================================
 window.HANDOVER_CHECKLIST = [
-  'Mode opérationnel courant + frictions actives par département',
-  'Dossiers du jour ouverts (FM, Crewing, Fleet Upgrade)',
-  'Échéances 24-72 h et points pour Top Management en cours',
-  'Décisions en attente d\'arbitrage VP / Heads',
-  'Coordination Asie : DO sortants/entrants, points de contact',
-  'Engagements externes en cours (clients, chantiers, autorités)',
-  'État Weekly Pack en préparation (jeudi 18:00)',
-  'Triggers actifs et chaîne d\'escalade',
-  'Documents partagés et accès SharePoint',
-  'Points de vigilance — signaux faibles à surveiller'
+  'Current operational mode + active frictions per department',
+  'Open cases (FM, Crewing, Fleet Upgrade)',
+  '24-72h deadlines and current Points for Top Management',
+  'Decisions pending VP / Heads arbitration',
+  'Asia coordination: outgoing/incoming DOs, points of contact',
+  'External engagements in progress (clients, shipyards, authorities)',
+  'Status of the Weekly Pack in preparation (Thursday 18:00)',
+  'Active triggers and escalation chain',
+  'Shared documents and SharePoint access',
+  'Watch items — weak signals to monitor'
 ];
 
 // ============================================================
-//   TRIGGERS — critères de déclenchement (techniques & crewing)
-//   Structurés par DO (department) × axe (Technique/Régulation/...)
-//   `exampleNote` pré-remplit la fenêtre de déclaration pour guider le DO.
-//   `suggestedNotifs` liste les IDs de modèles d'alerte à proposer après
-//   déclenchement (cf. window.NOTIF_TEMPLATES).
+//   TRIGGERS — escalation criteria (technical & crewing)
+//   Grouped by DO (department) × axis (Technical/Regulation/...).
+//   `exampleNote` pre-fills the declaration dialog to guide the DO.
+//   `suggestedNotifs` lists the alert templates to suggest after firing.
 // ============================================================
 window.TRIGGERS = [
   // ===================== FM — Fleet Management =====================
-  // ---- Technique ----
-  { id: 'trg-blackout', dept: 'FM', axe: 'Technique',
-    label: 'Black-out total (perte tous A/E)',
-    desc: 'Perte totale alimentation électrique, propulsion compromise.',
+  // ---- Technical ----
+  { id: 'trg-blackout', dept: 'FM', axe: 'Technical',
+    label: 'Total blackout (loss of all A/E)',
+    desc: 'Total loss of electrical power, propulsion compromised.',
     mode: 'crise', incidentType: 'A/E',
     suggestedNotifs: ['notif-crise','notif-charterer','notif-flag-tech'],
-    exampleNote: 'CC AMAZON — black-out total à 14h22 UTC. A/E1 et A/E2 OOO, A/E3 ne démarre pas. Bascule Emergency Generator effectuée. Position en transit SG → SLL. Capitaine a mouillé.' },
-  { id: 'trg-prop-loss', dept: 'FM', axe: 'Technique',
-    label: 'Perte totale propulsion en transit',
-    desc: 'Plus aucune capacité de manœuvre, dérive possible.',
+    exampleNote: 'CC AMAZON — total blackout at 14:22 UTC. A/E1 and A/E2 OOO, A/E3 will not start. Emergency Generator transfer effected. Position in transit SG → SLL. Master anchored.' },
+  { id: 'trg-prop-loss', dept: 'FM', axe: 'Technical',
+    label: 'Total loss of propulsion in transit',
+    desc: 'No remaining manoeuvring capability, possible drift.',
     mode: 'crise', incidentType: 'Propulsion',
     suggestedNotifs: ['notif-crise','notif-charterer','notif-flag-tech'],
-    exampleNote: 'CC ZHENG HE — M/E stoppée 02h15 UTC, cyl. 9 et 10 stay bolt cassés. Plus de propulsion. Position 10°S/65°E. Coordination remorquage LOF en cours.' },
-  { id: 'trg-me-degraded', dept: 'FM', axe: 'Technique',
-    label: 'M/E dégradée (cylindre HS, vitesse réduite)',
-    desc: 'Avarie ME partielle : cyl. isolé, réduction d\'allure, schedule impacté.',
+    exampleNote: 'CC ZHENG HE — M/E stopped 02:15 UTC, cyl 9 and 10 stay bolts broken. No propulsion. Position 10°S/65°E. LOF towage coordination in progress.' },
+  { id: 'trg-me-degraded', dept: 'FM', axe: 'Technical',
+    label: 'M/E degraded (cylinder out, reduced speed)',
+    desc: 'Partial ME failure: cyl isolated, speed reduction, schedule impacted.',
     mode: 'vigilance', incidentType: 'M/E',
     suggestedNotifs: ['notif-prealert','notif-charterer'],
-    exampleNote: 'CC ZHENG HE — M/E stay bolt cassé cyl 10 le 02/05, 2e bolt cassé cyl 9 le 14/05. Vitesse limitée à 13.5 kts. Calcul Everllence en cours. ETA LHV 10/06 (+2 jours).' },
-  { id: 'trg-ae-ooo', dept: 'FM', axe: 'Technique',
-    label: 'A/E OOO avec limitation reefer',
-    desc: 'Auxiliaire hors service, capacité reefer réduite — claims potentiels.',
+    exampleNote: 'CC ZHENG HE — M/E stay bolt cyl 10 broken on 02/05, 2nd bolt broken cyl 9 on 14/05. Speed limited to 13.5 kts. Everllence calc in progress. ETA LHV 10/06 (+2 days).' },
+  { id: 'trg-ae-ooo', dept: 'FM', axe: 'Technical',
+    label: 'A/E OOO with reefer limitation',
+    desc: 'Auxiliary out of service, reefer capacity reduced — potential claims.',
     mode: 'vigilance', incidentType: 'A/E',
     suggestedNotifs: ['notif-prealert','notif-charterer'],
-    exampleNote: 'CC ARISTOTE — A/E#3 OOO suite alarme HIMAP. Troubleshooting en cours. Reefer limité à 78 unités. LOP émise au chargeur.' },
-  { id: 'trg-cpp-partial', dept: 'FM', axe: 'Technique',
-    label: 'CPP / hélice : avarie partielle',
-    desc: 'Controllable Pitch Propeller ou ligne d\'arbre en mode dégradé.',
+    exampleNote: 'CC ARISTOTE — A/E#3 OOO due to HIMAP alarm. Troubleshooting in progress. Reefer limited to 78 units. LOP issued to shipper.' },
+  { id: 'trg-cpp-partial', dept: 'FM', axe: 'Technical',
+    label: 'CPP / propeller: partial failure',
+    desc: 'Controllable Pitch Propeller or shaft line in degraded mode.',
     mode: 'vigilance', incidentType: 'Propulsion',
     suggestedNotifs: ['notif-prealert','notif-yard'],
-    exampleNote: 'MONT VENTOUX — CPP failure, navire amarré à Malta. Premier docking. Hub à expédier à Berg (Suède), ETA 09/05. Planning +12 jours.' },
+    exampleNote: 'MONT VENTOUX — CPP failure, vessel berthed in Malta. First docking. Hub to be shipped to Berg (Sweden), ETA 09/05. Planning +12 days.' },
 
-  // ---- Régulation ----
-  { id: 'trg-class-susp', dept: 'FM', axe: 'Régulation',
-    label: 'Suspension classification imminente',
-    desc: 'Société de classification menace de suspendre — risque immobilisation totale.',
-    mode: 'crise', incidentType: 'Régulation',
+  // ---- Regulation ----
+  { id: 'trg-class-susp', dept: 'FM', axe: 'Regulation',
+    label: 'Imminent classification suspension',
+    desc: 'Classification society threatens suspension — total immobilisation risk.',
+    mode: 'crise', incidentType: 'Regulation',
     suggestedNotifs: ['notif-crise','notif-flag-tech'],
-    exampleNote: 'CC NORDIC — BV signale risque suspension class suite à 3 conditions of class non levées avant échéance. Courrier reçu ce jour. Plan d\'action requis sous 7 j.' },
-  { id: 'trg-psc-no-release', dept: 'FM', axe: 'Régulation',
-    label: 'Détention PSC sans plan de libération',
-    desc: 'Port State Control retient le navire, déficiences non résolues > 72 h.',
+    exampleNote: 'CC NORDIC — BV signals class suspension risk after 3 conditions of class not cleared before deadline. Letter received today. Action plan required within 7 days.' },
+  { id: 'trg-psc-no-release', dept: 'FM', axe: 'Regulation',
+    label: 'PSC detention without release plan',
+    desc: 'Port State Control holds the vessel, deficiencies unresolved > 72h.',
     mode: 'crise', incidentType: 'PSC',
     suggestedNotifs: ['notif-crise','notif-flag-tech','notif-charterer'],
-    exampleNote: 'CC X — détention Paris MoU Anvers depuis 72 h. 7 déficiences dont 3 detainable. Class en attente d\'éléments. ETA libération inconnue.' },
-  { id: 'trg-psc-detention', dept: 'FM', axe: 'Régulation',
-    label: 'Détention PSC avec plan correctif',
-    desc: 'Détention Port State Control, libération attendue dans les jours.',
+    exampleNote: 'CC X — Paris MoU Antwerp detention for 72h. 7 deficiencies including 3 detainable. Class awaiting elements. Release ETA unknown.' },
+  { id: 'trg-psc-detention', dept: 'FM', axe: 'Regulation',
+    label: 'PSC detention with corrective plan',
+    desc: 'Port State Control detention, release expected within days.',
     mode: 'vigilance', incidentType: 'PSC',
     suggestedNotifs: ['notif-prealert','notif-flag-tech','notif-charterer'],
-    exampleNote: 'APL GWANGYANG — détention USCG Long Beach, déficience CO2 fixed system. Bouteilles CO2 débarquées, refilling en cours. Readiness attendue 19/05.' },
-  { id: 'trg-psc-routine', dept: 'FM', axe: 'Régulation',
-    label: 'Inspection PSC routine — sans déficience',
-    desc: 'Visite Port State Control passée, à archiver.',
+    exampleNote: 'APL GWANGYANG — USCG Long Beach detention, CO2 fixed system deficiency. CO2 bottles landed, refilling in progress. Readiness expected 19/05.' },
+  { id: 'trg-psc-routine', dept: 'FM', axe: 'Regulation',
+    label: 'Routine PSC inspection — no deficiency',
+    desc: 'Port State Control visit passed, to be archived.',
     mode: 'nominal', incidentType: 'PSC',
     suggestedNotifs: [],
-    exampleNote: 'CC NEPTUNE — PSC Singapour ce jour, aucune déficience. Rapport archivé.' },
+    exampleNote: 'CC NEPTUNE — PSC Singapore today, no deficiency. Report archived.' },
 
   // ---- Commercial ----
   { id: 'trg-vetting-fail', dept: 'FM', axe: 'Commercial',
-    label: 'Vetting failed (observation critique)',
-    desc: 'OCIMF SIRE / CDI avec observations bloquantes — risque commercial.',
+    label: 'Vetting failed (critical observation)',
+    desc: 'OCIMF SIRE / CDI with blocking observations — commercial risk.',
     mode: 'vigilance', incidentType: 'Vetting',
     suggestedNotifs: ['notif-prealert','notif-charterer'],
-    exampleNote: 'CC X — vetting Shell échoué : 4 observations dont 1 high-risk (cargo securing). Plan correctif sous 14 j. Re-vetting prochaine escale Rotterdam.' },
+    exampleNote: 'CC X — Shell vetting failed: 4 observations including 1 high-risk (cargo securing). Corrective plan within 14 days. Re-vetting next call Rotterdam.' },
   { id: 'trg-lop', dept: 'FM', axe: 'Commercial',
-    label: 'Letter Of Protest émise',
-    desc: 'LOP standard (bunker délai, cargaison, port) — suivi commercial.',
-    mode: 'nominal', incidentType: 'Autre',
+    label: 'Letter Of Protest issued',
+    desc: 'Standard LOP (bunker delay, cargo, port) — commercial follow-up.',
+    mode: 'nominal', incidentType: 'Other',
     suggestedNotifs: ['notif-charterer'],
-    exampleNote: 'CC PEGASUS — LOP émise pour dommage gantry crane suite contact avec CC IRON lors berthing Shanghai. Réparations temporaires effectuées.' },
+    exampleNote: 'CC PEGASUS — LOP issued for gantry crane damage after contact with CC IRON during berthing Shanghai. Temp repairs completed.' },
 
-  // ---- Soutage ----
-  { id: 'trg-bunker-off', dept: 'FM', axe: 'Soutage',
-    label: 'Bunker off-spec ou contaminé',
-    desc: 'Carburant non conforme ISO 8217, échantillon en analyse, litige fournisseur.',
+  // ---- Bunkering ----
+  { id: 'trg-bunker-off', dept: 'FM', axe: 'Bunkering',
+    label: 'Off-spec or contaminated bunker',
+    desc: 'Fuel not compliant with ISO 8217, sample under analysis, supplier dispute.',
     mode: 'vigilance', incidentType: 'Bunker',
     suggestedNotifs: ['notif-prealert','notif-charterer'],
-    exampleNote: 'CC AURORE — bunker reçu Fujairah 12/05, analyse Veritas révèle catalytic fines hors spec. Suspension consommation, LOP fournisseur. Autonomie restante 8 j.' },
+    exampleNote: 'CC AURORE — bunker received Fujairah 12/05, Veritas analysis shows catalytic fines out of spec. Consumption suspended, LOP to supplier. Remaining autonomy 8 days.' },
 
-  // ---- Logistique ----
-  { id: 'trg-spare-late', dept: 'FM', axe: 'Logistique',
-    label: 'Pièce critique en retard > ETD planifiée',
-    desc: 'Lead time pièce détachée dépasse la fenêtre de réparation prévue.',
+  // ---- Logistics ----
+  { id: 'trg-spare-late', dept: 'FM', axe: 'Logistics',
+    label: 'Critical spare part late > planned ETD',
+    desc: 'Spare part lead time exceeds the scheduled repair window.',
     mode: 'vigilance', incidentType: 'M/E',
     suggestedNotifs: ['notif-prealert','notif-charterer'],
-    exampleNote: 'CC ALEXANDRIA — HFO purifiers #1&#2 OOO, navire sur MDO. Livraison pièces Kingston attendue 18/05, retard probable 22/05. Risque pénurie MDO.' },
+    exampleNote: 'CC ALEXANDRIA — HFO purifiers #1 & #2 OOO, vessel on MDO. Kingston part delivery expected 18/05, likely delay to 22/05. MDO shortage risk.' },
 
   // ===================== CR — Crewing =====================
-  // ---- Équipage ----
-  { id: 'trg-manning-breach', dept: 'CR', axe: 'Équipage',
-    label: 'Non-respect Minimum Safe Manning',
-    desc: 'Effectif inférieur au Safe Manning Document — navire ne peut plus naviguer légalement.',
+  // ---- Crew ----
+  { id: 'trg-manning-breach', dept: 'CR', axe: 'Crew',
+    label: 'Minimum Safe Manning breach',
+    desc: 'Manning below Safe Manning Document — vessel cannot legally sail.',
     mode: 'crise', incidentType: 'Manning',
     suggestedNotifs: ['notif-crise','notif-flag-tech','notif-charterer'],
-    exampleNote: 'CC NORDIC — départ 2/O ce jour sans remplacement confirmé. Effectif officiers de pont < SDOC. Capitaine ne peut pas appareiller. ETA agent manning Manille 48 h.' },
-  { id: 'trg-officer-gap', dept: 'CR', axe: 'Équipage',
-    label: 'Gap officier confirmé prochaine rotation',
-    desc: 'Officier (Master, Chief, 2/O...) non remplacé à temps pour la prochaine relève.',
+    exampleNote: 'CC NORDIC — 2/O signed off today without confirmed replacement. Deck officer manning < SDOC. Master cannot depart. Manila agent ETA 48h.' },
+  { id: 'trg-officer-gap', dept: 'CR', axe: 'Crew',
+    label: 'Confirmed officer gap on next rotation',
+    desc: 'Officer (Master, Chief, 2/O...) not replaced in time for next relief.',
     mode: 'vigilance', incidentType: 'Manning',
     suggestedNotifs: ['notif-prealert','notif-escalade-hod'],
-    exampleNote: 'CC SILVER — relève Capitaine prévue Singapour J+5, remplaçant non encore confirmé. Visa Schengen en cours. Plan B : prolongation Capitaine sortant.' },
-  { id: 'trg-medevac-impact', dept: 'CR', axe: 'Équipage',
-    label: 'MEDEVAC — remplacement non couvert',
-    desc: 'Évacuation médicale en cours, poste critique non encore couvert.',
+    exampleNote: 'CC SILVER — Master relief planned Singapore D+5, replacement not yet confirmed. Schengen visa in progress. Plan B: extend outgoing Master.' },
+  { id: 'trg-medevac-impact', dept: 'CR', axe: 'Crew',
+    label: 'MEDEVAC — replacement not covered',
+    desc: 'Medical evacuation in progress, critical post not yet covered.',
     mode: 'vigilance', incidentType: 'MEDEVAC',
     suggestedNotifs: ['notif-prealert','notif-flag-tech'],
-    exampleNote: 'CC MARCO POLO — MEDEVAC 2/O effectué 11h05 SG (hôpital Manille, état stabilisé). Remplaçant Capitaine Reyes à bord depuis 11h05. SDOC respecté.' },
-  { id: 'trg-rating-gap', dept: 'CR', axe: 'Équipage',
-    label: 'Gap rating — remplacement en standby',
-    desc: 'Matelot/OFS en relève prévue, remplacement déjà identifié.',
+    exampleNote: 'CC MARCO POLO — 2/O MEDEVAC effected 11:05 SG (Manila hospital, stabilised). Replacement Master Reyes onboard since 11:05. SDOC respected.' },
+  { id: 'trg-rating-gap', dept: 'CR', axe: 'Crew',
+    label: 'Rating gap — replacement on standby',
+    desc: 'AB/OS on scheduled relief, replacement already identified.',
     mode: 'nominal', incidentType: 'Manning',
     suggestedNotifs: [],
-    exampleNote: 'CC AURORE — 2 ratings en relève Hong Kong J+3, remplaçants confirmés agent Manille. Logistique vols OK.' },
+    exampleNote: 'CC AURORE — 2 ratings on relief Hong Kong D+3, replacements confirmed by Manila agent. Flight logistics OK.' },
 
   // ---- Certification ----
   { id: 'trg-cert-expiry', dept: 'CR', axe: 'Certification',
-    label: 'Cert. STCW / médicale expire < 14 j',
-    desc: 'Marin sur poste avec certificat critique en expiration courte sans plan de relève.',
+    label: 'STCW / medical cert expires < 14 days',
+    desc: 'Seafarer on duty with critical certificate expiring soon without relief plan.',
     mode: 'vigilance', incidentType: 'Certification',
     suggestedNotifs: ['notif-prealert','notif-escalade-hod'],
-    exampleNote: 'CC SINTRA — Chief Engineer cert STCW Advanced Firefighting expire J+10. Formation BV planifiée J+5 à Hambourg. Confirmer présence formation.' },
+    exampleNote: 'CC SINTRA — Chief Engineer STCW Advanced Firefighting cert expires D+10. BV training planned D+5 in Hamburg. Confirm training attendance.' },
 
   // ===================== FU — Fleet Upgrade =====================
-  // ---- Chantier ----
-  { id: 'trg-yard-slot', dept: 'FU', axe: 'Chantier',
-    label: 'Slot drydock / chantier à risque',
-    desc: 'Capacité Cosco Zhoushan / Shanghai compromise sur slot planifié.',
+  // ---- Shipyard ----
+  { id: 'trg-yard-slot', dept: 'FU', axe: 'Shipyard',
+    label: 'Drydock / yard slot at risk',
+    desc: 'Cosco Zhoushan / Shanghai capacity compromised on planned slot.',
     mode: 'vigilance', incidentType: 'Drydock',
     suggestedNotifs: ['notif-prealert','notif-yard'],
-    exampleNote: 'CC AMAZON — slot Seatrium prévu 15-20/05, capacité chantier réduite (3 navires concurrents). Confirmation slot attendue 12/05.' },
-  { id: 'trg-retrofit-delay', dept: 'FU', axe: 'Chantier',
-    label: 'Retrofit : retard > 7 jours',
-    desc: 'Phase-in / retrofit retardé au-delà de la fenêtre acceptable.',
+    exampleNote: 'CC AMAZON — Seatrium slot planned 15-20/05, yard capacity reduced (3 competing vessels). Slot confirmation expected 12/05.' },
+  { id: 'trg-retrofit-delay', dept: 'FU', axe: 'Shipyard',
+    label: 'Retrofit: delay > 7 days',
+    desc: 'Phase-in / retrofit delayed beyond acceptable window.',
     mode: 'vigilance', incidentType: 'Retrofit',
     suggestedNotifs: ['notif-prealert','notif-yard','notif-charterer'],
-    exampleNote: 'CC AMAZON — bush manufacturing en cours Espagne, dispo 02/06. ETD 18/06 (+15 jours vs planning initial). Nouveau bearing commandé en parallèle.' },
+    exampleNote: 'CC AMAZON — bush manufacturing in progress Spain, available 02/06. ETD 18/06 (+15 days vs initial plan). New bearing ordered in parallel.' },
 
-  // ---- Livraison ----
-  { id: 'trg-phase-in-risk', dept: 'FU', axe: 'Livraison',
-    label: 'Phase-in à risque (sea trial, bunker)',
-    desc: 'Livraison neuf navire menacée par défaut technique ou bunker readiness.',
+  // ---- Delivery ----
+  { id: 'trg-phase-in-risk', dept: 'FU', axe: 'Delivery',
+    label: 'Phase-in at risk (sea trial, bunker)',
+    desc: 'New vessel delivery threatened by technical defect or bunker readiness.',
     mode: 'vigilance', incidentType: 'Retrofit',
     suggestedNotifs: ['notif-prealert','notif-yard'],
-    exampleNote: 'CC NOTRE DAME — delivered. Départ 15/05 pour phase-in 17/05. LNG bunker 16/05 anchorage Shanghai. Pression sur LHV pour cérémonie.' }
+    exampleNote: 'CC NOTRE DAME — delivered. Departure 15/05 for phase-in 17/05. LNG bunker 16/05 Shanghai anchorage. Pressure on LHV for ceremony.' }
 ];
 
 // ============================================================
-//   MODÈLES DE NOTIFICATION
+//   ALERT TEMPLATES
 // ============================================================
-// Variables auto-substituées : {VESSEL} {EVENT} {DTG} {AUTHOR} {MODE} {DEPT}
+// Auto-substituted variables: {VESSEL} {EVENT} {DTG} {AUTHOR} {MODE} {DEPT}
 window.NOTIF_TEMPLATES = [
   { id: 'notif-prealert',
-    label: 'Vigilance — pré-alerte VP (AMBRE)',
-    channel: 'Mail + Teams',
+    label: 'Watch — VP pre-alert (AMBER)',
+    channel: 'Email + Teams',
     audience: 'VP CMA Ships + Heads of Department',
-    body: '[CMA Ships] Bascule mode VIGILANCE — friction {DEPT}. Navire {VESSEL}. Évt : {EVENT}. DTG {DTG}. SITREP exceptionnel suit. — {AUTHOR}, DM' },
+    body: '[CMA Ships] Mode shift to WATCH — {DEPT} friction. Vessel {VESSEL}. Event: {EVENT}. DTG {DTG}. Exceptional SITREP follows. — {AUTHOR}, DM' },
 
   { id: 'notif-crise',
-    label: 'Crise — activation cellule technique',
-    channel: 'SMS + appel + mail',
-    audience: 'VP + Heads + DO concernés',
-    body: '[CMA Ships] ACTIVATION cellule technique (mode CRISE). Navire {VESSEL}. Évt : {EVENT}. DTG {DTG}. Confirmer présence salle ou remote sous 30 min. — {AUTHOR}, DM' },
+    label: 'Crisis — technical cell activation',
+    channel: 'SMS + call + email',
+    audience: 'VP + Heads + relevant DOs',
+    body: '[CMA Ships] Technical cell ACTIVATION (CRISIS mode). Vessel {VESSEL}. Event: {EVENT}. DTG {DTG}. Confirm attendance (room or remote) within 30 min. — {AUTHOR}, DM' },
 
   { id: 'notif-deescalation',
-    label: 'Désescalade — retour NOMINAL',
-    channel: 'Mail',
+    label: 'De-escalation — back to NOMINAL',
+    channel: 'Email',
     audience: 'VP + Heads + DM/DO',
-    body: '[CMA Ships] Désescalade. Retour mode NOMINAL à {DTG}. Suivi en routine via SITREP quotidien. RETEX programmé sous 7 jours. — {AUTHOR}, DM' },
+    body: '[CMA Ships] De-escalation. Returning to NOMINAL mode at {DTG}. Routine follow-up via daily SITREP. AAR scheduled within 7 days. — {AUTHOR}, DM' },
 
   { id: 'notif-escalade-hod',
-    label: 'Escalade Head of Department (routine)',
-    channel: 'Mail + Teams',
+    label: 'Routine Head of Department escalation',
+    channel: 'Email + Teams',
     audience: 'Head of {DEPT} (FM/CR/FU)',
-    body: 'Bonjour,\n\nFriction signalée bloc {DEPT} — Navire {VESSEL}. Évt : {EVENT}. DTG {DTG}.\nMode CMA Ships actuel : {MODE}. Pas de bascule automatique — votre arbitrage est sollicité.\nDétails à suivre par mail. — {AUTHOR}, DO {DEPT}' },
+    body: 'Hello,\n\nFriction reported in {DEPT} block — Vessel {VESSEL}. Event: {EVENT}. DTG {DTG}.\nCurrent CMA Ships mode: {MODE}. No automatic switch — your arbitration is requested.\nDetails to follow by email. — {AUTHOR}, DO {DEPT}' },
 
   { id: 'notif-yard',
-    label: 'Notification chantier (Cosco / Shanghai)',
-    channel: 'Mail formel',
-    audience: 'Chantier (Cosco Zhoushan / Shanghai / autre)',
+    label: 'Shipyard notification (Cosco / Shanghai)',
+    channel: 'Formal email',
+    audience: 'Shipyard (Cosco Zhoushan / Shanghai / other)',
     body: 'Subject: Schedule update — {VESSEL} — {DTG}\n\nDear Yard Team,\n\nFleet Upgrade CMA Ships informs you of the following development on {VESSEL}:\n\nEvent: {EVENT}\n\nWe will coordinate slot adjustment and provide a revised arrival forecast within 24h. The Duty Officer Fleet Upgrade ({AUTHOR}) remains your point of contact.\n\nBest regards,\nCMA Ships — Fleet Upgrade' },
 
   { id: 'notif-charterer',
-    label: 'Notification affréteur / client',
-    channel: 'Mail formel — single voice via FM',
-    audience: 'Affréteur / client',
+    label: 'Charterer / client notification',
+    channel: 'Formal email — single voice via FM',
+    audience: 'Charterer / client',
     body: 'Subject: Operational update — {VESSEL} — {DTG}\n\nDear Sir/Madam,\n\nCMA Ships informs you of the following development on {VESSEL}:\n\nEvent: {EVENT}\n\nOur Fleet Management team is engaged and will provide a revised schedule shortly. We thank you for your understanding.\n\nKind regards,\nCMA Ships — Fleet Management' },
 
   { id: 'notif-flag-tech',
-    label: 'Notification État du pavillon (technique)',
-    channel: 'Mail formel',
+    label: 'Flag State notification (technical)',
+    channel: 'Formal email',
     audience: 'Flag State Administration',
     body: 'Subject: Technical notification — {VESSEL} — {DTG}\n\nDear Sir/Madam,\n\nIn accordance with applicable conventions and our reporting obligations, we hereby notify you of the following technical event on {VESSEL}:\n\nEvent: {EVENT}\n\nClassification society is engaged. A status update will follow according to the standard reporting cycle.\n\nRegards,\n{AUTHOR}\nCMA Ships — Fleet Management' }
 ];
 
-// CCIR conservé pour compat (rarement utilisé en mode technique).
+// ============================================================
+//   CLASSIFICATION LEVELS
+// ============================================================
+window.CLASSIFICATIONS = [
+  { code: 'CONFIDENTIAL', label: 'CONFIDENTIAL', short: 'CONF', color: 'red',
+    desc: 'Strictly controlled distribution — VP, Heads, legal, P&I. No external dissemination.' },
+  { code: 'RESTRICTED',   label: 'RESTRICTED',   short: 'REST', color: 'orange',
+    desc: 'Restricted distribution — crisis cell, authorities if required, classification, P&I.' },
+  { code: 'INTERNAL',     label: 'INTERNAL',     short: 'INT',  color: 'blue',
+    desc: 'CMA Ships internal distribution — routine operational pilotage.' },
+  { code: 'PUBLIC',       label: 'PUBLIC',       short: 'PUB',  color: 'green',
+    desc: 'Unrestricted information — can be shared externally.' }
+];
+
+// CCIR kept for backward compatibility (rarely used in technical mode).
 window.CCIR_TEMPLATE = [
-  { type: 'Info clé', label: 'Disponibilité technique flotte (M/E, A/E, propulsion)', items: [] },
-  { type: 'Info clé', label: 'Disponibilité équipages (Minimum Safe Manning, relèves)', items: [] },
-  { type: 'Info clé', label: 'Avancement chantiers FU (Cosco, Shanghai, autres)', items: [] },
-  { type: 'Confidentiel', label: 'Information NE PAS divulguer (négociations, claims P&I)', items: [] }
+  { type: 'Key info', label: 'Fleet technical availability (M/E, A/E, propulsion)', items: [] },
+  { type: 'Key info', label: 'Crew availability (Minimum Safe Manning, reliefs)', items: [] },
+  { type: 'Key info', label: 'FU shipyard progress (Cosco, Shanghai, others)', items: [] },
+  { type: 'Confidential', label: 'Information NOT to disclose (negotiations, P&I claims)', items: [] }
 ];
