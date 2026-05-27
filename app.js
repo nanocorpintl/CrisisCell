@@ -3208,15 +3208,6 @@
       .replace('{OFFHIRE_TARGET}', offhireM.ytdTarget)
       .replace('{OFFHIRE_RATIO}',  offhireM.ratio)
       .replace('{N_VESSELS}',      offhireM.nVessels)
-      .replace('{CLASSIFICATION_SUMMARY}', (() => {
-        const opens = state.incidents.filter(i => i.status !== 'closed');
-        const counts = {};
-        opens.forEach(i => { const k = i.classification || 'INTERNAL'; counts[k] = (counts[k] || 0) + 1; });
-        const parts = window.CLASSIFICATIONS
-          .filter(c => counts[c.code])
-          .map(c => `${c.short}=${counts[c.code]}`);
-        return parts.length ? parts.join(' · ') : 'Néant';
-      })())
       .replace('{TOP_MGMT_POINTS}', topMgmt.length === 0
         ? '  — No point remonté au VP —'
         : topMgmt.map((p, idx) => `  ${idx + 1}. ${p.label}`).join('\n'))
@@ -3228,15 +3219,10 @@
       .replace('{DO_FU}', state.dutyOfficers.FU || '—')
       .replace('{FM_DOSSIERS}',  doSitrep('FM', 'dossiers',  dossiersFor('FM')))
       .replace('{FM_DEADLINES}', doSitrep('FM', 'deadlines', deadlinesFor('FM')))
-      .replace('{FM_FRICTIONS}', doSitrep('FM', 'frictions', frictionsFor('FM')))
       .replace('{CR_DOSSIERS}',  doSitrep('CR', 'dossiers',  dossiersFor('CR')))
       .replace('{CR_DEADLINES}', doSitrep('CR', 'deadlines', deadlinesFor('CR')))
-      .replace('{CR_FRICTIONS}', doSitrep('CR', 'frictions', frictionsFor('CR')))
       .replace('{FU_DOSSIERS}',  doSitrep('FU', 'dossiers',  dossiersFor('FU')))
-      .replace('{FU_DEADLINES}', doSitrep('FU', 'deadlines', deadlinesFor('FU')))
-      .replace('{FU_FRICTIONS}', doSitrep('FU', 'frictions', frictionsFor('FU')))
-      .replace('{TRANSVERSE_FRICTIONS}', fmt(frictionsFor('XX')))
-      .replace('{WEAK_SIGNALS}', fmt(weakSig.map(s => `[${s.horizon}] ${s.label}`)));
+      .replace('{FU_DEADLINES}', doSitrep('FU', 'deadlines', deadlinesFor('FU')));
   }
 
   // ============================================================

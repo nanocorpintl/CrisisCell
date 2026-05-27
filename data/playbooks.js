@@ -257,7 +257,6 @@ Duty Manager Marseille: {DM_NAME}
 Mode: {MODE}
 
 ──── GLOBAL STATUS: {STATUT} ────
-Open cases classification: {CLASSIFICATION_SUMMARY}
 
 ▸ 24h SYNTHESIS
 {SYNTHESIS}
@@ -285,9 +284,6 @@ Today's cases
 24-72 h deadlines
 {FM_DEADLINES}
 
-Frictions to report
-{FM_FRICTIONS}
-
 ────────────────────────────────────────────────────────────────
   CREWING                                     Status [{CR_STATUS}]
   Duty Officer (Singapore HO) — {DO_CR}
@@ -298,9 +294,6 @@ Today's cases
 24-72 h deadlines
 {CR_DEADLINES}
 
-Frictions to report
-{CR_FRICTIONS}
-
 ────────────────────────────────────────────────────────────────
   FLEET UPGRADE                               Status [{FU_STATUS}]
   Duty Officer (China — on-site) — {DO_FU}
@@ -310,19 +303,6 @@ Today's cases
 
 24-72 h deadlines
 {FU_DEADLINES}
-
-Frictions to report
-{FU_FRICTIONS}
-
-════════════════════════════════════════════════════════════════
-  TRANSVERSE FRICTIONS
-════════════════════════════════════════════════════════════════
-{TRANSVERSE_FRICTIONS}
-
-════════════════════════════════════════════════════════════════
-  WEAK SIGNALS / LOOK-AHEAD  D+1 / W+1
-════════════════════════════════════════════════════════════════
-{WEAK_SIGNALS}
 `;
 
 // Kept for backward compatibility with triggers: alias to MODES.
