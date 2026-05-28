@@ -263,7 +263,45 @@
     'footer.right':          { en: '🔐 Data encrypted locally',
                                fr: '🔐 Données chiffrées localement' },
     'auth.title.sub':        { en: 'Operational Continuity — Technical & Crewing',
-                               fr: 'Continuité opérationnelle — Technique & Équipages' }
+                               fr: 'Continuité opérationnelle — Technique & Équipages' },
+    // Common actions (used inline in renderers)
+    'btn.add':               { en: 'Add',           fr: 'Ajouter' },
+    'btn.new':               { en: 'New',           fr: 'Nouveau' },
+    'btn.edit':              { en: 'Edit',          fr: 'Modifier' },
+    'btn.delete':            { en: 'Delete',        fr: 'Supprimer' },
+    'btn.save':              { en: 'Save',          fr: 'Enregistrer' },
+    'btn.cancel':            { en: 'Cancel',        fr: 'Annuler' },
+    'btn.close':             { en: 'Close',         fr: 'Fermer' },
+    'btn.update':            { en: 'Update',        fr: 'Mettre à jour' },
+    'btn.create':            { en: 'Create',        fr: 'Créer' },
+    'btn.generate':          { en: 'Generate',      fr: 'Générer' },
+    'btn.export':            { en: 'Export',        fr: 'Exporter' },
+    'btn.import':            { en: 'Import',        fr: 'Importer' },
+    'btn.reset':             { en: 'Reset',         fr: 'Réinitialiser' },
+    'btn.select.all':        { en: 'Select all',    fr: 'Tout sélectionner' },
+    'btn.deselect.all':      { en: 'Deselect all',  fr: 'Tout désélectionner' },
+    'btn.collapse.all':      { en: 'Collapse all',  fr: 'Tout replier' },
+    'btn.expand.all':        { en: 'Expand all',    fr: 'Tout déplier' },
+    // Common labels
+    'label.search':          { en: 'Search',        fr: 'Rechercher' },
+    'label.department':      { en: 'Department',    fr: 'Département' },
+    'label.fleet':           { en: 'Fleet',         fr: 'Flotte' },
+    'label.vessel':          { en: 'Vessel',        fr: 'Navire' },
+    'label.type':            { en: 'Type',          fr: 'Type' },
+    'label.severity':        { en: 'Severity',      fr: 'Sévérité' },
+    'label.status':          { en: 'Status',        fr: 'Statut' },
+    'label.criticality':     { en: 'Criticality',   fr: 'Criticité' },
+    'label.shipyard':        { en: 'Shipyard',      fr: 'Chantier' },
+    'label.manning':         { en: 'Manning agencies', fr: 'Agences de manning' },
+    // Common UX
+    'common.none':           { en: 'None',          fr: 'Aucun' },
+    'common.all':            { en: 'All',           fr: 'Tous' },
+    'common.no.data':        { en: 'No data',       fr: 'Aucune donnée' },
+    'common.loading':        { en: 'Loading…',      fr: 'Chargement…' },
+    // SITREP
+    'sitrep.group':          { en: 'Group',         fr: 'Grouper' },
+    'sitrep.sort':           { en: 'Sort',          fr: 'Trier' },
+    'sitrep.language':       { en: 'Language',      fr: 'Langue' }
   };
   function getLang() {
     return (state && state.lang) || localStorage.getItem('crisiscell.lang') || 'en';
