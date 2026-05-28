@@ -1215,9 +1215,12 @@
     fuPhase.addEventListener('change', refreshFuSubcat);
     refreshFuSubcat();
     const fuProject  = el('input', { value: inc.fuProject || '', placeholder: 'Project code or name (retrofit / phase-in)' });
+    const fuShipyard = el('input', { value: inc.shipyard || '', placeholder: 'Shipyard / yard (e.g. CSSC Jiangnan, Sembcorp, Damen…)' });
     const delayDays  = el('input', { type: 'number', min: 0, step: 0.5, value: inc.delayDays != null ? inc.delayDays : '', placeholder: 'Schedule slippage (days)' });
     const costUSD    = el('input', { type: 'number', min: 0, step: 100, value: inc.costImpactUSD != null ? inc.costImpactUSD : '', placeholder: 'Cost deviation (USD)' });
     const safetyImp  = el('input', { type: 'checkbox' }); safetyImp.checked = !!inc.safetyImpact;
+    // Crewing-specific: manning agencies involved on this vessel
+    const crManning  = el('input', { value: inc.manningAgencies || '', placeholder: 'Manning agencies (comma-separated, e.g. Anglo-Eastern, V.Ships, Bernhard Schulte)' });
     const mitigation = el('textarea', { placeholder: 'Mitigation plan / actions in progress' }, inc.mitigationPlan || '');
     const targetRes  = el('input', { type: 'date', value: inc.targetResolution ? inc.targetResolution.slice(0, 10) : '' });
     const progress   = el('input', { type: 'range', min: 0, max: 100, step: 5, value: inc.progress != null ? inc.progress : 0 });
@@ -1277,6 +1280,8 @@
         fuPhase: fuPhase.value || null,
         fuSubcategory: fuSubcat.value || null,
         fuProject: fuProject.value || null,
+        shipyard: fuShipyard.value || null,
+        manningAgencies: crManning.value || null,
         delayDays: delayDays.value === '' ? null : parseFloat(delayDays.value),
         costImpactUSD: costUSD.value === '' ? null : parseFloat(costUSD.value),
         safetyImpact: safetyImp.checked,
@@ -1293,7 +1298,8 @@
         const prev = inc;
         const tracked = ['type','vessel','department','severity','status',
                           'summary','sitrepLine','offhireEstimated','offhireActual','includeInSitrep',
-                          'fuPhase','fuSubcategory','fuProject','delayDays','costImpactUSD','safetyImpact',
+                          'fuPhase','fuSubcategory','fuProject','shipyard','manningAgencies',
+                          'delayDays','costImpactUSD','safetyImpact',
                           'mitigationPlan','targetResolution','progress',
                           'rootCause','feedbackRequired'];
         const changes = [];
@@ -1394,13 +1400,28 @@
       el('div', { class: 'muted', style: 'font-size:11.5px' },
         '⚠ At case closure, the EXACT off-hire hours figure is mandatory. These hours are summed in the CMA Ships SITREP and tracked in the COP tab.'),
 
-      // ===== Fleet Upgrade — phase, subcategory, project (FU only — toggled by department) =====
+      // ===== Crewing — manning agencies (CR only) =====
+      (() => {
+        const crBlock = el('div', { id: 'crOnlyBlock' },
+          el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Crewing — manning agencies'),
+          field('Manning agencies involved on this vessel', crManning)
+        );
+        const refreshCrBlock = () => {
+          crBlock.style.display = (department.value === 'CR') ? '' : 'none';
+        };
+        department.addEventListener('change', refreshCrBlock);
+        refreshCrBlock();
+        return crBlock;
+      })(),
+
+      // ===== Fleet Upgrade — phase, subcategory, project, shipyard (FU only — toggled by department) =====
       (() => {
         const fuBlock = el('div', { id: 'fuOnlyBlock' },
-          el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Fleet Upgrade — phase & project'),
+          el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Fleet Upgrade — phase, project & shipyard'),
           twoCol('FU phase', fuPhase, 'FU subcategory', fuSubcat),
-          twoCol('Project (retrofit / phase-in)', fuProject, 'Schedule slippage (days)', delayDays),
-          twoCol('Cost deviation (USD)', costUSD, 'Safety impact?', el('div', { style: 'display:flex;align-items:center;gap:6px;padding:6px 0' },
+          twoCol('Project (retrofit / phase-in)', fuProject, 'Shipyard / yard', fuShipyard),
+          twoCol('Schedule slippage (days)', delayDays, 'Cost deviation (USD)', costUSD),
+          field('Safety impact?', el('div', { style: 'display:flex;align-items:center;gap:6px;padding:6px 0' },
             safetyImp, el('span', { class: 'muted', style: 'font-size:12px' }, 'Yes if checked')))
         );
         const refreshFuBlock = () => {
@@ -3074,11 +3095,17 @@
         const raw = (i.sitrepLine || i.type || '').trim();
         const line = raw.toUpperCase().startsWith(v) ? raw : (raw ? v + ' — ' + raw : v);
         const mitig = (i.mitigationPlan || '').trim();
+        // Department-specific sub-info: shipyard for FU, manning agencies for CR
+        const fleetBadge = fleetOfCase(i);
+        const deptInfoBadges = [];
+        if (dept === 'FU' && i.shipyard) deptInfoBadges.push(badge('🏗 ' + i.shipyard, 'orange'));
+        if (dept === 'CR' && i.manningAgencies) deptInfoBadges.push(badge('👥 ' + i.manningAgencies, 'orange'));
         return el('div', { class: 'sitrep-pick-row', style: 'cursor:pointer', onclick: () => incidentForm(i.id) },
           el('label', { style: 'display:flex;align-items:center;gap:4px;cursor:pointer', onclick: e => e.stopPropagation(), title: 'Include in CMA SITREP' }, cb),
           badge(i.status, i.status === 'closed' ? 'green' : i.status === 'monitoring' ? 'orange' : 'red'),
           badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
-          badge(fleet, 'blue'),
+          badge(fleetBadge, 'blue'),
+          ...deptInfoBadges,
           el('span', { class: 'line' },
             line,
             mitig
@@ -3211,14 +3238,12 @@
       )
     ));
 
-    // ===== Select cases to include in the SITREP =====
+    // ===== Select cases to include in the SITREP — with group/sort like SITREP pages =====
     const allOpen = state.incidents.filter(i => i.status !== 'closed');
     if (allOpen.length > 0) {
-      const byDept = { FM: [], CR: [], FU: [], XX: [] };
-      allOpen.forEach(i => { (byDept[i.department || 'XX'] || byDept.XX).push(i); });
-      const sevOrderS = { crit: 0, high: 1, med: 2, low: 3 };
-      Object.keys(byDept).forEach(d => byDept[d].sort((a, b) => (sevOrderS[a.severity] ?? 9) - (sevOrderS[b.severity] ?? 9)));
-      const includedCount = allOpen.filter(i => i.includeInSitrep !== false).length;
+      if (!window._cmaPickFilter) window._cmaPickFilter = { groupBy: 'dept', sort: 'severity', collapsed: new Set() };
+      const cmaF = window._cmaPickFilter;
+      const includedCount = allOpen.filter(i => i.includeInSitrep === true).length;
 
       const allCb = el('input', { type: 'checkbox' });
       allCb.checked = includedCount === allOpen.length;
@@ -3228,53 +3253,104 @@
         save(); setTab('sitrep');
       });
 
-      const renderDeptBlock = (dept, list) => {
-        if (list.length === 0) return null;
-        return el('div', { class: 'sitrep-pick-block' },
-          el('div', { class: 'pick-dept-head' }, dept + ' — ' + list.length + ' case(s)'),
-          ...list.map(i => {
-            const include = i.includeInSitrep !== false;
-            const cb = el('input', { type: 'checkbox' });
-            cb.checked = include;
-            cb.addEventListener('change', () => {
-              i.includeInSitrep = cb.checked;
-              save(); setTab('sitrep');
-            });
-            const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
-            return el('label', { class: 'sitrep-pick-row' },
-              cb,
-              badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
-              badge(cls.short, cls.color),
-              el('span', { class: 'ref' }, i.ref || ''),
-              el('span', { class: 'line' }, (i.vessel || 'n/a') + ' — ' + (i.sitrepLine || i.type || '')));
-          }));
+      const vesselByName2 = {};
+      state.vessels.forEach(v => { vesselByName2[v.name] = v; });
+      const fleetOf2 = i => (vesselByName2[i.vessel] || {}).fleet || '— Unassigned —';
+
+      const sevOrdS = { crit: 0, high: 1, med: 2, low: 3 };
+      const statOrdS = { open: 0, monitoring: 1, closed: 2 };
+      const cmpS = (a, b) => {
+        if (cmaF.sort === 'severity') return (sevOrdS[a.severity] ?? 9) - (sevOrdS[b.severity] ?? 9);
+        if (cmaF.sort === 'status')   return (statOrdS[a.status] ?? 9) - (statOrdS[b.status] ?? 9);
+        if (cmaF.sort === 'vessel')   return (a.vessel || '').localeCompare(b.vessel || '');
+        return 0;
+      };
+      const groupKeyOfS = (i) => {
+        if (cmaF.groupBy === 'dept')     return i.department || 'XX';
+        if (cmaF.groupBy === 'fleet')    return fleetOf2(i);
+        if (cmaF.groupBy === 'status')   return (i.status || 'open').toUpperCase();
+        if (cmaF.groupBy === 'severity') return (i.severity || 'med').toUpperCase();
+        return '—';
+      };
+      const groups = {};
+      allOpen.forEach(i => { const k = groupKeyOfS(i); (groups[k] = groups[k] || []).push(i); });
+      const sevRank = { CRIT: 0, HIGH: 1, MED: 2, LOW: 3 };
+      const statRank = { OPEN: 0, MONITORING: 1, CLOSED: 2 };
+      const deptRank = { FM: 0, CR: 1, FU: 2, XX: 9 };
+      const keys = Object.keys(groups).sort((a, b) => {
+        if (cmaF.groupBy === 'severity') return (sevRank[a] ?? 9) - (sevRank[b] ?? 9);
+        if (cmaF.groupBy === 'status')   return (statRank[a] ?? 9) - (statRank[b] ?? 9);
+        if (cmaF.groupBy === 'dept')     return (deptRank[a] ?? 9) - (deptRank[b] ?? 9);
+        return a.localeCompare(b);
+      });
+
+      const groupSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
+        el('option', { value: 'dept',     selected: cmaF.groupBy === 'dept' },     'Group: Department'),
+        el('option', { value: 'fleet',    selected: cmaF.groupBy === 'fleet' },    'Group: Fleet'),
+        el('option', { value: 'status',   selected: cmaF.groupBy === 'status' },   'Group: Status'),
+        el('option', { value: 'severity', selected: cmaF.groupBy === 'severity' }, 'Group: Criticality'));
+      groupSel.addEventListener('change', () => { cmaF.groupBy = groupSel.value; cmaF.collapsed = new Set(); setTab('sitrep'); });
+      const sortSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
+        el('option', { value: 'severity', selected: cmaF.sort === 'severity' }, 'Sort: Criticality'),
+        el('option', { value: 'status',   selected: cmaF.sort === 'status' },   'Sort: Status'),
+        el('option', { value: 'vessel',   selected: cmaF.sort === 'vessel' },   'Sort: Vessel'));
+      sortSel.addEventListener('change', () => { cmaF.sort = sortSel.value; setTab('sitrep'); });
+      const allCollapsedCma = keys.length > 0 && keys.every(k => cmaF.collapsed.has(k));
+      const collapseBtn = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+        if (allCollapsedCma) cmaF.collapsed = new Set();
+        else keys.forEach(k => cmaF.collapsed.add(k));
+        setTab('sitrep');
+      } }, allCollapsedCma ? '▾ Expand all' : '▸ Collapse all');
+
+      const renderRowS = (i) => {
+        const cb = el('input', { type: 'checkbox' });
+        cb.checked = i.includeInSitrep === true;
+        cb.addEventListener('click', e => e.stopPropagation());
+        cb.addEventListener('change', e => {
+          e.stopPropagation();
+          i.includeInSitrep = cb.checked; save(); setTab('sitrep');
+        });
+        const extras = [];
+        if (i.department === 'FU' && i.shipyard) extras.push(badge('🏗 ' + i.shipyard, 'orange'));
+        if (i.department === 'CR' && i.manningAgencies) extras.push(badge('👥 ' + i.manningAgencies, 'orange'));
+        return el('label', { class: 'sitrep-pick-row', style: 'cursor:pointer' },
+          cb,
+          badge(i.department || 'XX', 'blue'),
+          badge(fleetOf2(i), 'blue'),
+          badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
+          badge(i.status, i.status === 'closed' ? 'green' : i.status === 'monitoring' ? 'orange' : 'red'),
+          ...extras,
+          el('span', { class: 'line' }, (i.vessel || 'n/a') + ' — ' + (i.sitrepLine || i.type || '')));
+      };
+      const renderGroup = (k) => {
+        const list = groups[k].slice().sort(cmpS);
+        const isCollapsed = cmaF.collapsed.has(k);
+        const inGroup = list.filter(i => i.includeInSitrep === true).length;
+        const header = el('div', {
+          style: 'display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(58,160,255,.08);border-radius:4px;cursor:pointer;margin-top:8px',
+          onclick: () => { isCollapsed ? cmaF.collapsed.delete(k) : cmaF.collapsed.add(k); setTab('sitrep'); }
+        },
+          el('span', { style: 'font-weight:700' }, isCollapsed ? '▸' : '▾'),
+          el('strong', {}, k),
+          el('span', { class: 'muted', style: 'font-size:11.5px' }, list.length + ' case(s) · ' + inGroup + ' included'));
+        if (isCollapsed) return header;
+        return el('div', {}, header, el('div', { class: 'sitrep-pick-block', style: 'margin-top:0' }, ...list.map(renderRowS)));
       };
 
       root.appendChild(panel('Select cases to include in the SITREP',
         el('div', {},
-          el('p', { class: 'muted' },
-            'Check/uncheck each case based on its importance for the SITREP. ' +
-            includedCount + ' / ' + allOpen.length + ' case(s) currently included.'),
-          el('div', { class: 'sitrep-pick-header' },
-            allCb, el('span', {}, el('strong', {}, 'Check / uncheck all'))),
-          el('div', { class: 'sitrep-pick-quick' },
+          el('p', { class: 'muted', style: 'font-size:11.5px' },
+            includedCount + ' / ' + allOpen.length + ' case(s) currently included. Use the per-department SITREPs (My SITREP FM / CR / FU) or tick directly below.'),
+          el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center' },
+            groupSel, sortSel, collapseBtn,
+            el('span', { style: 'width:8px' }),
+            el('label', { style: 'display:flex;align-items:center;gap:6px;cursor:pointer' },
+              allCb, el('span', { style: 'font-size:12px' }, 'Check / uncheck all')),
             el('button', { class: 'btn-ghost btn-sm', onclick: () => {
               allOpen.forEach(i => i.includeInSitrep = (['crit','high'].includes(i.severity)));
               save(); setTab('sitrep');
-            } }, '⚡ Select CRIT + HIGH only'),
-            el('button', { class: 'btn-ghost btn-sm', onclick: () => {
-              allOpen.forEach(i => i.includeInSitrep = (i.classification && i.classification !== 'PUBLIC'));
-              save(); setTab('sitrep');
-            } }, '🔒 Exclude PUBLIC'),
-            el('button', { class: 'btn-ghost btn-sm', onclick: () => {
-              allOpen.forEach(i => i.includeInSitrep = true);
-              save(); setTab('sitrep');
-            } }, '✓ Include all')
-          ),
-          renderDeptBlock('FM', byDept.FM),
-          renderDeptBlock('CR', byDept.CR),
-          renderDeptBlock('FU', byDept.FU),
-          renderDeptBlock('XX', byDept.XX)
+            } }, '⚡ CRIT + HIGH only')),
+          ...keys.map(renderGroup)
         )
       ));
     }
@@ -3459,7 +3535,13 @@
       .replace('{CR_DOSSIERS}',  doSitrep('CR', 'dossiers',  dossiersFor('CR')))
       .replace('{CR_DEADLINES}', doSitrep('CR', 'deadlines', deadlinesFor('CR')))
       .replace('{FU_DOSSIERS}',  doSitrep('FU', 'dossiers',  dossiersFor('FU')))
-      .replace('{FU_DEADLINES}', doSitrep('FU', 'deadlines', deadlinesFor('FU')));
+      .replace('{FU_DEADLINES}', doSitrep('FU', 'deadlines', deadlinesFor('FU')))
+      // Defensive: strip any residual block from older template versions
+      .replace(/[═]{20,}\s*\n\s*FRICTIONS TRANSVERSES\s*\n[═]{20,}[\s\S]*?(?=\n[═─]{20,}|$)/g, '')
+      .replace(/[═]{20,}\s*\n\s*SIGNAUX FAIBLES.*?\n[═]{20,}[\s\S]*?(?=\n[═─]{20,}|$)/g, '')
+      .replace(/[═]{20,}\s*\n\s*TRANSVERSE FRICTIONS\s*\n[═]{20,}[\s\S]*?(?=\n[═─]{20,}|$)/g, '')
+      .replace(/[═]{20,}\s*\n\s*WEAK SIGNALS.*?\n[═]{20,}[\s\S]*?(?=\n[═─]{20,}|$)/g, '')
+      .replace(/(?:Frictions à signaler|Frictions to report)\s*\n\s*▸\s*N(?:éant|one)\.?\s*\n?/g, '');
   }
 
   // ============================================================
@@ -3736,7 +3818,9 @@
     from: '', to: '',
     vessel: '', fleet: '', shipManager: '', fuelType: '',
     dept: '', type: '', severity: '', classification: '', status: '',
-    text: ''
+    text: '',
+    groupBy: 'none', sortKey: 'startedAt', sortDir: 'desc',
+    collapsed: new Set()
   };
 
   renderers.analyse = (root) => {
@@ -3885,40 +3969,143 @@
           kpiTile('Safety impacts', safetyImpacts, safetyImpacts ? 'danger' : 'ok')
         ),
 
-        el('div', { class: 'flex', style: 'margin:12px 0' },
-          el('button', { class: 'btn-ghost btn-sm', onclick: () => exportAnalyseCSV(matches, vesselByName) }, '⬇ Export CSV')
-        ),
+        (() => {
+          // Group + sort controls (same model as SITREP pages)
+          const groupSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
+            el('option', { value: 'none',       selected: analyseFilters.groupBy === 'none' },       'Group: None'),
+            el('option', { value: 'dept',       selected: analyseFilters.groupBy === 'dept' },       'Group: Department'),
+            el('option', { value: 'fleet',      selected: analyseFilters.groupBy === 'fleet' },      'Group: Fleet'),
+            el('option', { value: 'status',     selected: analyseFilters.groupBy === 'status' },     'Group: Status'),
+            el('option', { value: 'severity',   selected: analyseFilters.groupBy === 'severity' },   'Group: Criticality'));
+          groupSel.addEventListener('change', () => {
+            analyseFilters.groupBy = groupSel.value;
+            analyseFilters.collapsed = new Set();
+            setTab('analyse');
+          });
+          const sortSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
+            el('option', { value: 'startedAt', selected: analyseFilters.sortKey === 'startedAt' }, 'Sort: Date'),
+            el('option', { value: 'dept',      selected: analyseFilters.sortKey === 'dept' },      'Sort: Department'),
+            el('option', { value: 'severity',  selected: analyseFilters.sortKey === 'severity' },  'Sort: Criticality'),
+            el('option', { value: 'status',    selected: analyseFilters.sortKey === 'status' },    'Sort: Status'),
+            el('option', { value: 'vessel',    selected: analyseFilters.sortKey === 'vessel' },    'Sort: Vessel'),
+            el('option', { value: 'fleet',     selected: analyseFilters.sortKey === 'fleet' },     'Sort: Fleet'),
+            el('option', { value: 'offhire',   selected: analyseFilters.sortKey === 'offhire' },   'Sort: Off-hire'));
+          sortSel.addEventListener('change', () => { analyseFilters.sortKey = sortSel.value; setTab('analyse'); });
+          const dirBtn = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+            analyseFilters.sortDir = analyseFilters.sortDir === 'asc' ? 'desc' : 'asc';
+            setTab('analyse');
+          } }, analyseFilters.sortDir === 'asc' ? '▲ Asc' : '▼ Desc');
+          const exportBtn = el('button', { class: 'btn-ghost btn-sm', onclick: () => exportAnalyseCSV(matches, vesselByName) }, '⬇ Export CSV');
 
-        matches.length === 0
-          ? el('div', { class: 'empty' }, 'No case matches the filters.')
-          : tableEl(
-            ['Réf', 'Vessel', 'Fleet', 'Ship Mgr', 'Fuel', 'Dept', 'Type', 'Sev.', 'Class.', 'Started', 'Off-hire (h)', 'Status'],
-            matches.slice(0, 300).map(i => {
-              const v = vesselByName[i.vessel] || {};
-              const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
-              const off = i.status === 'closed'
-                ? (i.offhireActual != null ? fmtH(i.offhireActual) : '⚠')
-                : (fmtH(i.offhireEstimated || 0) + ' est.');
-              return [
-                el('span', { class: 'mono', style: 'cursor:pointer;text-decoration:underline',
-                  onclick: () => incidentForm(i.id) }, i.ref || ''),
-                i.vessel || '—',
-                v.fleet ? badge(v.fleet, 'blue') : '—',
-                v.shipManager || '—',
-                v.fuelType || v.fuelMode || '—',
-                badge(i.department || 'XX', 'blue'),
-                i.type || '',
-                badge((i.severity || '?').toUpperCase(), severityColor(i.severity)),
-                badge(cls.short, cls.color),
-                fmtTime(i.startedAt),
-                off,
-                badge(i.status, i.status === 'closed' ? 'green' : 'red')
-              ];
-            })),
-        matches.length > 300
-          ? el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:6px' },
-              '⚠ Showing first 300 results only. Refine filters or export to CSV.')
-          : null
+          if (matches.length === 0) {
+            return el('div', {},
+              el('div', { class: 'flex', style: 'margin:12px 0;gap:6px;flex-wrap:wrap' }, groupSel, sortSel, dirBtn, exportBtn),
+              el('div', { class: 'empty' }, 'No case matches the filters.'));
+          }
+
+          // Group/sort keys
+          const sevOrd = { crit: 0, high: 1, med: 2, low: 3 };
+          const statOrd = { open: 0, monitoring: 1, closed: 2 };
+          const offhireOf = i => i.status === 'closed' ? (i.offhireActual || 0) : (i.offhireEstimated || 0);
+          const keyOf = (i, k) => {
+            if (k === 'dept')      return i.department || 'XX';
+            if (k === 'fleet')     return (vesselByName[i.vessel] || {}).fleet || '— Unassigned —';
+            if (k === 'severity')  return sevOrd[i.severity] ?? 9;
+            if (k === 'status')    return statOrd[i.status] ?? 9;
+            if (k === 'vessel')    return (i.vessel || '').toUpperCase();
+            if (k === 'offhire')   return offhireOf(i);
+            if (k === 'startedAt') return i.startedAt || '';
+            return '';
+          };
+          const sortDir = analyseFilters.sortDir || 'desc';
+          const cmp = (a, b) => {
+            const av = keyOf(a, analyseFilters.sortKey), bv = keyOf(b, analyseFilters.sortKey);
+            if (av < bv) return sortDir === 'asc' ? -1 : 1;
+            if (av > bv) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+          };
+
+          // Row renderer (single row of the table)
+          const renderRow = (i) => {
+            const v = vesselByName[i.vessel] || {};
+            const off = i.status === 'closed'
+              ? (i.offhireActual != null ? fmtH(i.offhireActual) : '⚠')
+              : (fmtH(i.offhireEstimated || 0) + ' est.');
+            return el('tr', { style: 'cursor:pointer', onclick: () => incidentForm(i.id) },
+              el('td', {}, badge(i.department || 'XX', 'blue')),
+              el('td', {}, v.fleet ? badge(v.fleet, 'blue') : '—'),
+              el('td', {}, i.vessel || '—'),
+              el('td', {}, i.type || ''),
+              el('td', {}, badge((i.severity || '?').toUpperCase(), severityColor(i.severity))),
+              el('td', {}, off),
+              el('td', {}, fmtTime(i.startedAt)),
+              el('td', {}, badge(i.status, i.status === 'closed' ? 'green' : 'red')));
+          };
+          const tableHead = el('thead', {}, el('tr', {},
+            el('th', {}, 'Dept'), el('th', {}, 'Fleet'), el('th', {}, 'Vessel'),
+            el('th', {}, 'Type'), el('th', {}, 'Sev.'), el('th', {}, 'Off-hire'),
+            el('th', {}, 'Started'), el('th', {}, 'Status')));
+
+          // Ungrouped case
+          if (analyseFilters.groupBy === 'none') {
+            const sorted = matches.slice().sort(cmp).slice(0, 300);
+            return el('div', {},
+              el('div', { class: 'flex', style: 'margin:12px 0;gap:6px;flex-wrap:wrap' }, groupSel, sortSel, dirBtn, exportBtn),
+              el('table', {}, tableHead, el('tbody', {}, ...sorted.map(renderRow))),
+              matches.length > 300
+                ? el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:6px' },
+                    '⚠ Showing first 300 results only. Refine filters or export to CSV.')
+                : null);
+          }
+
+          // Grouped (collapsible) case
+          const groups = {};
+          matches.forEach(i => {
+            let k;
+            if (analyseFilters.groupBy === 'dept')     k = i.department || 'XX';
+            else if (analyseFilters.groupBy === 'fleet') k = (vesselByName[i.vessel] || {}).fleet || '— Unassigned —';
+            else if (analyseFilters.groupBy === 'status')   k = (i.status || 'open').toUpperCase();
+            else if (analyseFilters.groupBy === 'severity') k = (i.severity || 'med').toUpperCase();
+            (groups[k] = groups[k] || []).push(i);
+          });
+          const sevRank = { CRIT: 0, HIGH: 1, MED: 2, LOW: 3 };
+          const statRank = { OPEN: 0, MONITORING: 1, CLOSED: 2 };
+          const deptRank = { FM: 0, CR: 1, FU: 2, XX: 9 };
+          const keys = Object.keys(groups).sort((a, b) => {
+            if (analyseFilters.groupBy === 'severity') return (sevRank[a] ?? 9) - (sevRank[b] ?? 9);
+            if (analyseFilters.groupBy === 'status')   return (statRank[a] ?? 9) - (statRank[b] ?? 9);
+            if (analyseFilters.groupBy === 'dept')     return (deptRank[a] ?? 9) - (deptRank[b] ?? 9);
+            return a.localeCompare(b);
+          });
+
+          const allCollapsedA = keys.length > 0 && keys.every(k => analyseFilters.collapsed.has(k));
+          const collapseBtn = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+            if (allCollapsedA) analyseFilters.collapsed = new Set();
+            else keys.forEach(k => analyseFilters.collapsed.add(k));
+            setTab('analyse');
+          } }, allCollapsedA ? '▾ Expand all' : '▸ Collapse all');
+
+          return el('div', {},
+            el('div', { class: 'flex', style: 'margin:12px 0;gap:6px;flex-wrap:wrap' },
+              groupSel, sortSel, dirBtn, collapseBtn, exportBtn),
+            ...keys.map(k => {
+              const list = groups[k].slice().sort(cmp);
+              const isCollapsed = analyseFilters.collapsed.has(k);
+              const header = el('div', {
+                style: 'display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(58,160,255,.08);border-radius:4px;cursor:pointer;margin-top:8px',
+                onclick: () => {
+                  if (isCollapsed) analyseFilters.collapsed.delete(k); else analyseFilters.collapsed.add(k);
+                  setTab('analyse');
+                }
+              },
+                el('span', { style: 'font-weight:700' }, isCollapsed ? '▸' : '▾'),
+                el('strong', {}, k),
+                el('span', { class: 'muted', style: 'font-size:11.5px' }, list.length + ' case(s)'));
+              if (isCollapsed) return header;
+              return el('div', {}, header,
+                el('table', { style: 'margin-top:0' }, tableHead.cloneNode(true), el('tbody', {}, ...list.slice(0, 300).map(renderRow))));
+            }));
+        })()
       )
     ));
 
