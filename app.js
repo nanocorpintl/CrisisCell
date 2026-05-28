@@ -1075,6 +1075,14 @@
     'PSC', 'Vetting', 'Bunker', 'Cargaison',
     'Manning', 'Certification', 'MEDEVAC', 'Regulation', 'Other'
   ];
+  // FU-specific subcategories (V1 — Option C of FU Director's BR)
+  const FU_SUBCATEGORIES = {
+    'preparation': ['Late specification', 'Rework needed', 'Budget deviation', 'Yard change', 'Other'],
+    'execution':   ['Safety', 'Delivery (delay)', 'Service', 'Budget', 'Other'],
+    'project':     ['Predefined risk', 'Other']
+  };
+  // Map BR criticality labels → CrisisCell severity (display alias only)
+  const CRITICALITY_OF_SEV = { crit: 'CRITICAL', high: 'WARNING', med: 'NORMAL', low: 'NORMAL' };
   function incidentForm(idEdit) {
     const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', department: 'FM', type: 'M/E', classification: 'INTERNAL' };
     const ref = el('input', { value: inc.ref || ('DOS-' + Date.now().toString(36).toUpperCase()) });
@@ -1141,6 +1149,33 @@
       value: inc.offhireActual != null ? inc.offhireActual : '',
       placeholder: 'MANDATORY at closure — exact figure'
     });
+    // ===== FU-specific & follow-up fields (visible for all depts, FU-driven) =====
+    const fuPhase = el('select', {},
+      el('option', { value: '', selected: !inc.fuPhase }, '— Not applicable —'),
+      el('option', { value: 'preparation', selected: inc.fuPhase === 'preparation' }, 'Drydock — Preparation'),
+      el('option', { value: 'execution',   selected: inc.fuPhase === 'execution'   }, 'Drydock — Execution'),
+      el('option', { value: 'project',     selected: inc.fuPhase === 'project'     }, 'Project (retrofit)'));
+    const fuSubcat = el('select', {});
+    const refreshFuSubcat = () => {
+      const opts = FU_SUBCATEGORIES[fuPhase.value] || [];
+      fuSubcat.innerHTML = '';
+      fuSubcat.appendChild(el('option', { value: '' }, opts.length ? '— Select —' : '— Set phase first —'));
+      opts.forEach(o => fuSubcat.appendChild(el('option', { value: o, selected: inc.fuSubcategory === o }, o)));
+    };
+    fuPhase.addEventListener('change', refreshFuSubcat);
+    refreshFuSubcat();
+    const fuProject  = el('input', { value: inc.fuProject || '', placeholder: 'Project code or name (retrofit / phase-in)' });
+    const delayDays  = el('input', { type: 'number', min: 0, step: 0.5, value: inc.delayDays != null ? inc.delayDays : '', placeholder: 'Schedule slippage (days)' });
+    const costUSD    = el('input', { type: 'number', min: 0, step: 100, value: inc.costImpactUSD != null ? inc.costImpactUSD : '', placeholder: 'Cost deviation (USD)' });
+    const safetyImp  = el('input', { type: 'checkbox' }); safetyImp.checked = !!inc.safetyImpact;
+    const mitigation = el('textarea', { placeholder: 'Mitigation plan / actions in progress' }, inc.mitigationPlan || '');
+    const responsible = el('input', { list: 'dl-owners', value: inc.responsible || '', placeholder: 'Owner of the mitigation' });
+    const targetRes  = el('input', { type: 'date', value: inc.targetResolution ? inc.targetResolution.slice(0, 10) : '' });
+    const progress   = el('input', { type: 'range', min: 0, max: 100, step: 5, value: inc.progress != null ? inc.progress : 0 });
+    const progressOut = el('output', { style: 'min-width:36px;text-align:right' }, (inc.progress != null ? inc.progress : 0) + '%');
+    progress.addEventListener('input', () => progressOut.textContent = progress.value + '%');
+    const rootCause     = el('textarea', { placeholder: 'Root cause (filled at closure)' }, inc.rootCause || '');
+    const lessonsLearned = el('textarea', { placeholder: 'Lessons learned (filled at closure)' }, inc.lessonsLearned || '');
     // Highlight le champ "réel" si statut = closed
     const refreshOffhireRequired = () => {
       const required = status.value === 'closed';
@@ -1182,6 +1217,18 @@
         offhireEstimated: parseFloat(offhireEst.value) || 0,
         offhireActual: offhireAct.value === '' ? null : parseFloat(offhireAct.value),
         includeInSitrep: includeInSitrep.checked,
+        fuPhase: fuPhase.value || null,
+        fuSubcategory: fuSubcat.value || null,
+        fuProject: fuProject.value || null,
+        delayDays: delayDays.value === '' ? null : parseFloat(delayDays.value),
+        costImpactUSD: costUSD.value === '' ? null : parseFloat(costUSD.value),
+        safetyImpact: safetyImp.checked,
+        mitigationPlan: mitigation.value || null,
+        responsible: responsible.value || null,
+        targetResolution: targetRes.value ? new Date(targetRes.value).toISOString() : null,
+        progress: parseInt(progress.value, 10) || 0,
+        rootCause: rootCause.value || null,
+        lessonsLearned: lessonsLearned.value || null,
         history: (inc.history || []).slice()
       };
       if (data.status === 'closed' && !data.closedAt) data.closedAt = nowISO();
@@ -1189,7 +1236,10 @@
         // Compute diff vs previous version → append history entries
         const prev = inc;
         const tracked = ['type','vessel','department','severity','status','classification',
-                          'summary','sitrepLine','offhireEstimated','offhireActual','includeInSitrep'];
+                          'summary','sitrepLine','offhireEstimated','offhireActual','includeInSitrep',
+                          'fuPhase','fuSubcategory','fuProject','delayDays','costImpactUSD','safetyImpact',
+                          'mitigationPlan','responsible','targetResolution','progress',
+                          'rootCause','lessonsLearned'];
         const changes = [];
         tracked.forEach(k => {
           const a = prev[k]; const b = data[k];
@@ -1248,6 +1298,33 @@
       twoCol('Estimated off-hire (hours)', offhireEst, 'Actual off-hire (closure — MANDATORY)', offhireAct),
       el('div', { class: 'muted', style: 'font-size:11.5px' },
         '⚠ At case closure, the EXACT off-hire hours figure is mandatory. These hours are summed in the CMA Ships SITREP and tracked in the COP tab.'),
+
+      // ===== Fleet Upgrade — phase, subcategory, project (V1 from FU BR) =====
+      el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
+        'Fleet Upgrade — phase & project',
+        el('span', { class: 'muted', style: 'font-weight:normal;font-size:11px;margin-left:8px' },
+          '(FU cases only — leave blank for FM/CR)')),
+      twoCol('FU phase', fuPhase, 'FU subcategory', fuSubcat),
+      twoCol('Project (retrofit / phase-in)', fuProject, 'Schedule slippage (days)', delayDays),
+      twoCol('Cost deviation (USD)', costUSD, 'Safety impact?', el('div', { style: 'display:flex;align-items:center;gap:6px;padding:6px 0' },
+        safetyImp, el('span', { class: 'muted', style: 'font-size:12px' }, 'Yes if checked'))),
+
+      // ===== Mitigation & follow-up =====
+      el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Mitigation & follow-up'),
+      field('Mitigation plan', mitigation),
+      twoCol('Responsible (owner of mitigation)', responsible, 'Target resolution date', targetRes),
+      el('div', { style: 'display:flex;align-items:center;gap:10px;margin:6px 0' },
+        el('label', { style: 'margin:0;min-width:80px' }, 'Progress'),
+        progress, progressOut),
+
+      // ===== Closure (root cause / lessons learned) =====
+      el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
+        'Closure',
+        el('span', { class: 'muted', style: 'font-weight:normal;font-size:11px;margin-left:8px' },
+          '(filled when status = closed)')),
+      field('Root cause / investigation', rootCause),
+      field('Lessons learned', lessonsLearned),
+
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Update' : 'Create'),
         el('button', { class: 'btn-ghost', onclick: closeModal }, 'Cancel')
@@ -3629,6 +3706,11 @@
     const fuelOf   = (i) => { const v = vesselByName[i.vessel]; return v ? (v.fuelType || v.fuelMode || '—') : '—'; };
     const mgrOf    = (i) => { const v = vesselByName[i.vessel]; return v ? (v.shipManager || '—') : '—'; };
 
+    // FU-specific aggregates (V1 from FU BR — sums across filtered cases)
+    const totalDelayDays = matches.reduce((a, i) => a + (parseFloat(i.delayDays) || 0), 0);
+    const totalCostUSD   = matches.reduce((a, i) => a + (parseFloat(i.costImpactUSD) || 0), 0);
+    const safetyImpacts  = matches.filter(i => i.safetyImpact).length;
+
     root.appendChild(panel('Results — ' + matches.length + ' case(s)',
       el('div', {},
         el('div', { class: 'grid-4' },
@@ -3636,6 +3718,11 @@
           kpiTile('Estimated off-hire (open)', fmtH(totalOpenOff), totalOpenOff ? 'warn' : 'ok'),
           kpiTile('Actual off-hire (closed)', fmtH(totalClosedOff), 'muted'),
           kpiTile('Total off-hire', fmtH(totalOpenOff + totalClosedOff), 'muted')
+        ),
+        el('div', { class: 'grid-3', style: 'margin-top:10px' },
+          kpiTile('Schedule slippage (Σ days)', totalDelayDays.toFixed(1) + ' d', totalDelayDays > 0 ? 'warn' : 'muted'),
+          kpiTile('Cost deviation (Σ USD)', totalCostUSD ? '$' + totalCostUSD.toLocaleString('en-US') : '$0', totalCostUSD > 0 ? 'warn' : 'muted'),
+          kpiTile('Safety impacts', safetyImpacts, safetyImpacts ? 'danger' : 'ok')
         ),
 
         el('div', { class: 'flex', style: 'margin:12px 0' },
