@@ -757,34 +757,29 @@
     // Raccourcis directs
     switch (e.key) {
       case '?': $('#helpModal').classList.remove('hidden'); e.preventDefault(); break;
-      case 'l': quickAction('mel'); e.preventDefault(); break;
-      case 'a': quickAction('action'); e.preventDefault(); break;
-      case 'd': quickAction('decision'); e.preventDefault(); break;
-      case 'k': quickAction('comm'); e.preventDefault(); break;
       case 'i': quickAction('incident'); e.preventDefault(); break;
       case 's': setTab('sitrep'); e.preventDefault(); break;
       case 'n': quickNewCurrentTab(); e.preventDefault(); break;
     }
   }
   function quickNewCurrentTab() {
-    const map = {
-      incidents: 'incident', vessels: 'vessel', actions: 'action',
-      decisions: 'decision', comms: 'comm', stakeholders: 'stakeholder',
-      resources: 'resource', risk: 'risk', rhythm: 'rhythm',
-      team: 'team', passation: 'passation', anticipation: 'anticipation',
-      retex: 'retex', exercises: 'exercise', mel: 'mel',
-      frictions: 'friction'
-    };
-    const action = map[currentTab];
-    if (action) quickAction(action);
-    else toast('Pas de "nouveau" disponible sur cet onglet.', 'warn');
+    // Case is the only quick-creation entry — context-aware by tab
+    if (currentTab === 'dosit-fm') return incidentForm(null, 'FM');
+    if (currentTab === 'dosit-cr') return incidentForm(null, 'CR');
+    if (currentTab === 'dosit-fu') return incidentForm(null, 'FU');
+    return incidentForm();
   }
   function quickAction(kind) {
     if (kind === 'mel') return melForm();
     if (kind === 'action') return actionForm();
     if (kind === 'decision') return decisionForm();
     if (kind === 'comm') return commsForm();
-    if (kind === 'incident') return incidentForm();
+    if (kind === 'incident') {
+      if (currentTab === 'dosit-fm') return incidentForm(null, 'FM');
+      if (currentTab === 'dosit-cr') return incidentForm(null, 'CR');
+      if (currentTab === 'dosit-fu') return incidentForm(null, 'FU');
+      return incidentForm();
+    }
     if (kind === 'vessel') return vesselForm();
     if (kind === 'stakeholder') return stakeholderForm();
     if (kind === 'resource') return resourceForm();
@@ -1083,8 +1078,10 @@
   };
   // Map BR criticality labels → CrisisCell severity (display alias only)
   const CRITICALITY_OF_SEV = { crit: 'CRITICAL', high: 'WARNING', med: 'NORMAL', low: 'NORMAL' };
-  function incidentForm(idEdit) {
-    const inc = idEdit ? state.incidents.find(i => i.id === idEdit) : { severity: 'med', status: 'open', department: 'FM', type: 'M/E', classification: 'INTERNAL' };
+  function incidentForm(idEdit, defaultDept) {
+    const inc = idEdit
+      ? state.incidents.find(i => i.id === idEdit)
+      : { severity: 'med', status: 'open', department: (defaultDept || 'FM'), type: 'M/E', classification: 'INTERNAL' };
     const ref = el('input', { value: inc.ref || ('DOS-' + Date.now().toString(36).toUpperCase()) });
     const type = el('select', {}, ...INCIDENT_TYPES.map(t => el('option', { value: t, selected: inc.type === t }, t)));
     const department = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code, selected: (inc.department || 'FM') === d.code }, d.code + ' — ' + d.label)));
@@ -1299,15 +1296,22 @@
       el('div', { class: 'muted', style: 'font-size:11.5px' },
         '⚠ At case closure, the EXACT off-hire hours figure is mandatory. These hours are summed in the CMA Ships SITREP and tracked in the COP tab.'),
 
-      // ===== Fleet Upgrade — phase, subcategory, project (V1 from FU BR) =====
-      el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
-        'Fleet Upgrade — phase & project',
-        el('span', { class: 'muted', style: 'font-weight:normal;font-size:11px;margin-left:8px' },
-          '(FU cases only — leave blank for FM/CR)')),
-      twoCol('FU phase', fuPhase, 'FU subcategory', fuSubcat),
-      twoCol('Project (retrofit / phase-in)', fuProject, 'Schedule slippage (days)', delayDays),
-      twoCol('Cost deviation (USD)', costUSD, 'Safety impact?', el('div', { style: 'display:flex;align-items:center;gap:6px;padding:6px 0' },
-        safetyImp, el('span', { class: 'muted', style: 'font-size:12px' }, 'Yes if checked'))),
+      // ===== Fleet Upgrade — phase, subcategory, project (FU only — toggled by department) =====
+      (() => {
+        const fuBlock = el('div', { id: 'fuOnlyBlock' },
+          el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Fleet Upgrade — phase & project'),
+          twoCol('FU phase', fuPhase, 'FU subcategory', fuSubcat),
+          twoCol('Project (retrofit / phase-in)', fuProject, 'Schedule slippage (days)', delayDays),
+          twoCol('Cost deviation (USD)', costUSD, 'Safety impact?', el('div', { style: 'display:flex;align-items:center;gap:6px;padding:6px 0' },
+            safetyImp, el('span', { class: 'muted', style: 'font-size:12px' }, 'Yes if checked')))
+        );
+        const refreshFuBlock = () => {
+          fuBlock.style.display = (department.value === 'FU') ? '' : 'none';
+        };
+        department.addEventListener('change', refreshFuBlock);
+        refreshFuBlock();
+        return fuBlock;
+      })(),
 
       // ===== Mitigation & follow-up =====
       el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Mitigation & follow-up'),
@@ -2982,6 +2986,11 @@
 
     root.appendChild(panel('My SITREP — ' + dept + ' · ' + deptLabel,
       el('div', {},
+        el('div', { class: 'flex-between', style: 'margin-bottom:8px' },
+          el('div', { class: 'muted', style: 'font-size:11.5px' },
+            'Add a new case directly in the ' + dept + ' scope — opens a pre-filled form.'),
+          el('button', { class: 'btn-primary btn-sm', onclick: () => incidentForm(null, dept) },
+            '+ Add case (' + dept + ')')),
         twoCol('Department status', status, 'Duty Officer (name)', doName),
 
         el('div', { class: 'flex', style: 'gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 6px' },
