@@ -2993,16 +2993,29 @@
       .slice()
       .sort((a, b) => (sevOrderDo[a.severity] ?? 9) - (sevOrderDo[b.severity] ?? 9));
 
-    // Group by fleet (from vessel registry)
+    // Group by fleet / status / criticality — driven by filter.groupBy
     const vesselByName = {};
     state.vessels.forEach(v => { vesselByName[v.name] = v; });
+    const fleetOfCase = i => (vesselByName[i.vessel] || {}).fleet || '— Unassigned fleet —';
+    const groupBy = filter.groupBy || 'fleet';
+    const groupKeyOf = (i) => {
+      if (groupBy === 'status') return (i.status || 'open').toUpperCase();
+      if (groupBy === 'severity') return (i.severity || 'med').toUpperCase();
+      return fleetOfCase(i);
+    };
     const groupedByFleet = {};
     allDeptCases.forEach(i => {
-      const v = vesselByName[i.vessel];
-      const fleet = (v && v.fleet) || '— Unassigned fleet —';
-      (groupedByFleet[fleet] = groupedByFleet[fleet] || []).push(i);
+      const k = groupKeyOf(i);
+      (groupedByFleet[k] = groupedByFleet[k] || []).push(i);
     });
-    const fleetKeys = Object.keys(groupedByFleet).sort();
+    // Stable key ordering: alphabetical for fleet, ranked for status & severity
+    const statRank = { OPEN: 0, MONITORING: 1, CLOSED: 2 };
+    const sevRank  = { CRIT: 0, HIGH: 1, MED: 2, LOW: 3 };
+    const fleetKeys = Object.keys(groupedByFleet).sort((a, b) => {
+      if (groupBy === 'status')   return (statRank[a] ?? 9) - (statRank[b] ?? 9);
+      if (groupBy === 'severity') return (sevRank[a]  ?? 9) - (sevRank[b]  ?? 9);
+      return a.localeCompare(b);
+    });
 
     // Filter toggles (multi)
     const sevToggle = (s, label, color) => {
@@ -3020,11 +3033,11 @@
       }, label);
     };
 
-    // Build fleet blocks (collapsible)
+    // Build group blocks (collapsible) — grouped by fleet / status / criticality
     const fleetBlocks = fleetKeys.map(fleet => {
       const list = groupedByFleet[fleet];
       const isCollapsed = filter.collapsed.has(fleet);
-      const includedCount = list.filter(i => i.includeInSitrep !== false).length;
+      const includedCount = list.filter(i => i.includeInSitrep === true).length;
       const header = el('div', {
         style: 'display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(58,160,255,.08);border-radius:4px;cursor:pointer;margin-top:8px',
         onclick: () => {
@@ -3105,11 +3118,21 @@
       save(); setTab('dosit-' + dept.toLowerCase());
     } }, '☐ Deselect all');
 
-    // Sort: by fleet (default) / criticality / status — applies to row order inside groups and to group order
+    // Group by: fleet (default) / status / criticality — determines case grouping
+    const groupSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
+      el('option', { value: 'fleet',    selected: groupBy === 'fleet'    }, 'Group: Fleet'),
+      el('option', { value: 'status',   selected: groupBy === 'status'   }, 'Group: Status'),
+      el('option', { value: 'severity', selected: groupBy === 'severity' }, 'Group: Criticality'));
+    groupSel.addEventListener('change', () => {
+      filter.groupBy = groupSel.value;
+      filter.collapsed.clear();
+      setTab('dosit-' + dept.toLowerCase());
+    });
+    // Sort within each group
     const sortSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
-      el('option', { value: 'fleet',    selected: (filter.rowSort || 'severity') === 'fleet' }, 'Sort: Fleet'),
       el('option', { value: 'severity', selected: (filter.rowSort || 'severity') === 'severity' }, 'Sort: Criticality'),
-      el('option', { value: 'status',   selected: filter.rowSort === 'status' }, 'Sort: Status'));
+      el('option', { value: 'status',   selected: filter.rowSort === 'status' }, 'Sort: Status'),
+      el('option', { value: 'vessel',   selected: filter.rowSort === 'vessel' }, 'Sort: Vessel'));
     sortSel.addEventListener('change', () => { filter.rowSort = sortSel.value; setTab('dosit-' + dept.toLowerCase()); });
 
     root.appendChild(panel('My SITREP — ' + dept + ' · ' + deptLabel,
@@ -3133,7 +3156,7 @@
         el('div', { class: 'flex-between', style: 'margin:8px 0 4px' },
           el('span', { class: 'muted', style: 'font-size:11.5px;font-weight:600;color:var(--accent-2)' },
             'Cases by fleet · ' + allDeptCases.length + ' total'),
-          el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap' }, sortSel, selectAll, deselectAll, toggleAll)),
+          el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap' }, groupSel, sortSel, selectAll, deselectAll, toggleAll)),
         fleetKeys.length === 0
           ? el('div', { class: 'empty' }, 'No case matches the filters for ' + dept + '.')
           : el('div', {}, ...fleetBlocks),
@@ -3350,7 +3373,7 @@
       return c ? c.short : 'INT';
     };
     const dossiersFor = (dept) => state.incidents
-      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept && i.includeInSitrep !== false)
+      .filter(i => i.status !== 'closed' && (i.department || 'XX') === dept && i.includeInSitrep === true)
       .slice()
       .sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9))
       .map(i => {
