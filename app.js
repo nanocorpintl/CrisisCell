@@ -555,7 +555,8 @@
       b.addEventListener('click', () => { $('#menuPop').hidden = true; });
     });
     $('#modalClose').addEventListener('click', closeModal);
-    $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+    // Intentionally NOT closing the modal on backdrop click — prevents data loss
+    // from an accidental misclick. Use the ✕ button or Escape to close.
     $('#helpBtn').addEventListener('click', () => $('#helpModal').classList.remove('hidden'));
     $('#helpClose').addEventListener('click', () => $('#helpModal').classList.add('hidden'));
     $('#helpModal').addEventListener('click', e => { if (e.target.id === 'helpModal') $('#helpModal').classList.add('hidden'); });
@@ -948,7 +949,8 @@
   // ============================================================
   // Filtres persistants pour le tableau Dossiers
   const dossierFilters = {
-    search: '', dept: '', type: '', severity: '', classification: '', status: '', vessel: ''
+    search: '', dept: '', type: '', severity: '', classification: '', status: '', vessel: '',
+    sortKey: 'startedAt', sortDir: 'desc'
   };
 
   renderers.incidents = (root) => {
@@ -968,9 +970,6 @@
     const fSev = (() => { const s = el('select', {}, el('option', { value: '' }, 'All severities'),
         ...['crit','high','med','low'].map(c => el('option', { value: c, selected: dossierFilters.severity === c }, c.toUpperCase())));
       s.addEventListener('change', () => { dossierFilters.severity = s.value; setTab('incidents'); }); return s; })();
-    const fCls = (() => { const s = el('select', {}, el('option', { value: '' }, 'All classifications'),
-        ...window.CLASSIFICATIONS.map(c => el('option', { value: c.code, selected: dossierFilters.classification === c.code }, c.label)));
-      s.addEventListener('change', () => { dossierFilters.classification = s.value; setTab('incidents'); }); return s; })();
     const fStatus = (() => { const s = el('select', {}, el('option', { value: '' }, 'All statuses'),
         ...['open','monitoring','closed'].map(st => el('option', { value: st, selected: dossierFilters.status === st }, st)));
       s.addEventListener('change', () => { dossierFilters.status = s.value; setTab('incidents'); }); return s; })();
@@ -985,7 +984,6 @@
       if (dossierFilters.dept && (i.department || 'XX') !== dossierFilters.dept) return false;
       if (dossierFilters.type && i.type !== dossierFilters.type) return false;
       if (dossierFilters.severity && i.severity !== dossierFilters.severity) return false;
-      if (dossierFilters.classification && (i.classification || 'INTERNAL') !== dossierFilters.classification) return false;
       if (dossierFilters.status && i.status !== dossierFilters.status) return false;
       if (q) {
         const hay = ((i.ref || '') + ' ' + (i.vessel || '') + ' ' + (i.sitrepLine || '') + ' ' + (i.summary || '')).toLowerCase();
@@ -1018,16 +1016,71 @@
           el('div', {}, el('label', {}, 'Type'), fType),
           el('div', {}, el('label', {}, 'Severity'), fSev)
         ),
-        el('div', { class: 'form-row cols-4', style: 'margin-bottom:8px' },
-          el('div', {}, el('label', {}, 'Classification'), fCls),
+        el('div', { class: 'form-row cols-3', style: 'margin-bottom:8px' },
           el('div', {}, el('label', {}, 'Status'), fStatus),
           el('div', { style: 'align-self:end;grid-column:span 2' }, fReset)
         ),
-        filtered.length === 0
-          ? el('div', { class: 'empty' }, state.incidents.length === 0 ? 'No case.' : 'No case matches the filters.')
-          : tableEl(
-            ['SITREP', 'Ref', 'Dept', 'Type', 'Vessel', 'Sev.', 'Class.', 'Off-hire (h)', 'Started', 'Status', ''],
-            filtered.map(i => {
+        (() => {
+          if (filtered.length === 0) {
+            return el('div', { class: 'empty' }, state.incidents.length === 0 ? 'No case.' : 'No case matches the filters.');
+          }
+          // Index vessel → fleet for sorting/display
+          const vesselByName = {};
+          state.vessels.forEach(v => { vesselByName[v.name] = v; });
+          const fleetOf = i => (vesselByName[i.vessel] || {}).fleet || '';
+          const sevOrder = { crit: 0, high: 1, med: 2, low: 3 };
+          const statOrder = { open: 0, monitoring: 1, closed: 2 };
+          const offhireOf = i => i.status === 'closed' ? (i.offhireActual || 0) : (i.offhireEstimated || 0);
+          const keyFns = {
+            sitrep:    i => i.includeInSitrep !== false ? 0 : 1,
+            dept:      i => i.department || 'XX',
+            fleet:     i => fleetOf(i),
+            type:      i => i.type || '',
+            vessel:    i => (i.vessel || '').toUpperCase(),
+            severity:  i => sevOrder[i.severity] ?? 9,
+            offhire:   i => offhireOf(i),
+            startedAt: i => i.startedAt || '',
+            endedAt:   i => i.closedAt || '￿',
+            status:    i => statOrder[i.status] ?? 9
+          };
+          const sortKey = dossierFilters.sortKey || 'startedAt';
+          const sortDir = dossierFilters.sortDir || 'desc';
+          const kfn = keyFns[sortKey] || keyFns.startedAt;
+          const sorted = filtered.slice().sort((a, b) => {
+            const av = kfn(a), bv = kfn(b);
+            if (av < bv) return sortDir === 'asc' ? -1 : 1;
+            if (av > bv) return sortDir === 'asc' ? 1 : -1;
+            return 0;
+          });
+          const sortArrow = k => sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+          const headerCell = (label, k) => el('th', {
+            style: 'cursor:pointer;user-select:none',
+            onclick: () => {
+              if (dossierFilters.sortKey === k) {
+                dossierFilters.sortDir = dossierFilters.sortDir === 'asc' ? 'desc' : 'asc';
+              } else {
+                dossierFilters.sortKey = k;
+                dossierFilters.sortDir = 'asc';
+              }
+              setTab('incidents');
+            }
+          }, label + sortArrow(k));
+
+          return el('table', {},
+            el('thead', {}, el('tr', {},
+              headerCell('SITREP', 'sitrep'),
+              headerCell('Dept', 'dept'),
+              headerCell('Fleet', 'fleet'),
+              headerCell('Type', 'type'),
+              headerCell('Vessel', 'vessel'),
+              headerCell('Sev.', 'severity'),
+              headerCell('Off-hire (h)', 'offhire'),
+              headerCell('Started', 'startedAt'),
+              headerCell('Ended', 'endedAt'),
+              headerCell('Status', 'status'),
+              el('th', {}, '')
+            )),
+            el('tbody', {}, ...sorted.map(i => {
               const isClosed = i.status === 'closed';
               const value = isClosed
                 ? (i.offhireActual != null ? fmtH(i.offhireActual) : '⚠ not figured')
@@ -1035,32 +1088,32 @@
               const color = isClosed
                 ? (i.offhireActual == null ? 'red' : 'grey')
                 : ((i.offhireEstimated || 0) > 72 ? 'orange' : 'blue');
-              const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
-              const include = i.includeInSitrep !== false;
               const cb = el('input', { type: 'checkbox' });
-              cb.checked = include;
-              cb.addEventListener('change', () => {
+              cb.checked = i.includeInSitrep !== false;
+              cb.addEventListener('click', e => e.stopPropagation());
+              cb.addEventListener('change', e => {
+                e.stopPropagation();
                 i.includeInSitrep = cb.checked;
                 save();
               });
-              return [
-                cb,
-                el('span', { class: 'mono' }, i.ref || ''),
-                badge(i.department || 'XX', 'blue'),
-                i.type || '',
-                i.vessel || '',
-                badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
-                badge(cls.short, cls.color),
-                badge(value, color),
-                fmtTime(i.startedAt),
-                badge(i.status, i.status === 'open' ? 'red' : i.status === 'monitoring' ? 'orange' : 'green'),
-                el('div', { class: 'flex' },
-                  el('button', { class: 'btn-ghost btn-sm', onclick: () => incidentForm(i.id) }, 'Edit'),
-                  el('button', { class: 'btn-danger btn-sm', onclick: () => deleteIncident(i.id) }, '✕')
-                )
-              ];
-            })
-          )
+              const fleet = fleetOf(i);
+              const tr = el('tr', { style: 'cursor:pointer', onclick: () => incidentForm(i.id) },
+                el('td', {}, cb),
+                el('td', {}, badge(i.department || 'XX', 'blue')),
+                el('td', {}, fleet ? badge(fleet, 'blue') : '—'),
+                el('td', {}, i.type || ''),
+                el('td', {}, i.vessel || ''),
+                el('td', {}, badge((i.severity || 'med').toUpperCase(), severityColor(i.severity))),
+                el('td', {}, badge(value, color)),
+                el('td', {}, fmtTime(i.startedAt)),
+                el('td', {}, isClosed ? (i.closedAt ? fmtTime(i.closedAt) : '—') : el('span', { class: 'muted' }, 'ongoing')),
+                el('td', {}, badge(i.status, i.status === 'open' ? 'red' : i.status === 'monitoring' ? 'orange' : 'green')),
+                el('td', {},
+                  el('button', { class: 'btn-danger btn-sm', onclick: e => { e.stopPropagation(); deleteIncident(i.id); } }, '✕'))
+              );
+              return tr;
+            })));
+        })()
       )
     ));
   };
@@ -1082,7 +1135,9 @@
     const inc = idEdit
       ? state.incidents.find(i => i.id === idEdit)
       : { severity: 'med', status: 'open', department: (defaultDept || 'FM'), type: 'M/E', classification: 'INTERNAL' };
-    const ref = el('input', { value: inc.ref || ('DOS-' + Date.now().toString(36).toUpperCase()) });
+    // Reference is fixed once assigned — never editable to prevent double-entries
+    const fixedRef = inc.ref || ('DOS-' + Date.now().toString(36).toUpperCase());
+    const ref = el('input', { value: fixedRef, readonly: 'readonly', tabindex: '-1', style: 'background:rgba(255,255,255,.04);color:var(--muted);cursor:not-allowed' });
     const type = el('select', {}, ...INCIDENT_TYPES.map(t => el('option', { value: t, selected: inc.type === t }, t)));
     const department = el('select', {}, ...window.DEPARTMENTS.map(d => el('option', { value: d.code, selected: (inc.department || 'FM') === d.code }, d.code + ' — ' + d.label)));
     const vessel = el('input', { list: 'dl-vessels', value: inc.vessel || '', placeholder: 'Type the name or paste text (auto-detect)' });
@@ -1121,8 +1176,6 @@
     setTimeout(refreshVesselInfo, 0);
     const severity = el('select', {}, ...['low','med','high','crit'].map(s => el('option', { value: s, selected: inc.severity === s }, s.toUpperCase())));
     const status = el('select', {}, ...['open','monitoring','closed'].map(s => el('option', { value: s, selected: inc.status === s }, s)));
-    const classification = el('select', {}, ...window.CLASSIFICATIONS.map(c =>
-      el('option', { value: c.code, selected: (inc.classification || 'INTERNAL') === c.code }, c.label)));
     const startedAt = el('input', { type: 'datetime-local', value: inc.startedAt ? new Date(inc.startedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16) });
     const summary = el('textarea', { placeholder: 'Description: who, what, where, operational consequence, action in progress' }, inc.summary || '');
     const sitrepLine = el('input', {
@@ -1166,13 +1219,13 @@
     const costUSD    = el('input', { type: 'number', min: 0, step: 100, value: inc.costImpactUSD != null ? inc.costImpactUSD : '', placeholder: 'Cost deviation (USD)' });
     const safetyImp  = el('input', { type: 'checkbox' }); safetyImp.checked = !!inc.safetyImpact;
     const mitigation = el('textarea', { placeholder: 'Mitigation plan / actions in progress' }, inc.mitigationPlan || '');
-    const responsible = el('input', { list: 'dl-owners', value: inc.responsible || '', placeholder: 'Owner of the mitigation' });
     const targetRes  = el('input', { type: 'date', value: inc.targetResolution ? inc.targetResolution.slice(0, 10) : '' });
     const progress   = el('input', { type: 'range', min: 0, max: 100, step: 5, value: inc.progress != null ? inc.progress : 0 });
     const progressOut = el('output', { style: 'min-width:36px;text-align:right' }, (inc.progress != null ? inc.progress : 0) + '%');
     progress.addEventListener('input', () => progressOut.textContent = progress.value + '%');
-    const rootCause     = el('textarea', { placeholder: 'Root cause (filled at closure)' }, inc.rootCause || '');
-    const lessonsLearned = el('textarea', { placeholder: 'Lessons learned (filled at closure)' }, inc.lessonsLearned || '');
+    // Auto-set progress to 100% when status switches to closed
+    const causeIdentified = el('textarea', { placeholder: 'Cause identified (filled at closure — not the full RCA)' }, inc.rootCause || '');
+    const feedbackReq = el('input', { type: 'checkbox' }); feedbackReq.checked = !!inc.feedbackRequired;
     // Highlight le champ "réel" si statut = closed
     const refreshOffhireRequired = () => {
       const required = status.value === 'closed';
@@ -1201,16 +1254,17 @@
           toast('Vessel auto-detected: ' + detected.name, 'ok');
         }
       }
+      const isClosed = status.value === 'closed';
       const data = {
         id: inc.id || id(),
-        ref: ref.value, type: type.value, vessel: vessel.value,
+        ref: fixedRef, type: type.value, vessel: vessel.value,
         department: department.value,
         severity: severity.value,
         status: status.value,
         startedAt: new Date(startedAt.value).toISOString(),
         summary: summary.value,
         sitrepLine: sitrepLine.value || `${vessel.value || 'n/a'} — ${type.value}` + (summary.value ? ' : ' + summary.value.split('\n')[0].slice(0, 120) : ''),
-        classification: classification.value,
+        classification: inc.classification || 'INTERNAL',
         offhireEstimated: parseFloat(offhireEst.value) || 0,
         offhireActual: offhireAct.value === '' ? null : parseFloat(offhireAct.value),
         includeInSitrep: includeInSitrep.checked,
@@ -1221,22 +1275,21 @@
         costImpactUSD: costUSD.value === '' ? null : parseFloat(costUSD.value),
         safetyImpact: safetyImp.checked,
         mitigationPlan: mitigation.value || null,
-        responsible: responsible.value || null,
         targetResolution: targetRes.value ? new Date(targetRes.value).toISOString() : null,
-        progress: parseInt(progress.value, 10) || 0,
-        rootCause: rootCause.value || null,
-        lessonsLearned: lessonsLearned.value || null,
+        progress: isClosed ? 100 : (parseInt(progress.value, 10) || 0),
+        rootCause: causeIdentified.value || null,
+        feedbackRequired: feedbackReq.checked,
         history: (inc.history || []).slice()
       };
       if (data.status === 'closed' && !data.closedAt) data.closedAt = nowISO();
       if (idEdit) {
         // Compute diff vs previous version → append history entries
         const prev = inc;
-        const tracked = ['type','vessel','department','severity','status','classification',
+        const tracked = ['type','vessel','department','severity','status',
                           'summary','sitrepLine','offhireEstimated','offhireActual','includeInSitrep',
                           'fuPhase','fuSubcategory','fuProject','delayDays','costImpactUSD','safetyImpact',
-                          'mitigationPlan','responsible','targetResolution','progress',
-                          'rootCause','lessonsLearned'];
+                          'mitigationPlan','targetResolution','progress',
+                          'rootCause','feedbackRequired'];
         const changes = [];
         tracked.forEach(k => {
           const a = prev[k]; const b = data[k];
@@ -1273,14 +1326,35 @@
         applyAlertClass();
         $('#alertSelect').value = state.alert;
       }
-      save(); closeModal(); setTab('incidents');
+      // Stay on the tab where the form was opened from (do not jump to Cases)
+      save(); closeModal(); setTab(currentTab);
     };
+
+    // ===== Closure block (built first so we can toggle it from status change) =====
+    const closureBlock = el('div', {},
+      el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Closure'),
+      field('Cause identified', causeIdentified),
+      el('label', {
+        style: 'display:flex;gap:8px;align-items:center;margin:8px 0;padding:8px;background:rgba(255,180,0,0.08);border-radius:4px;cursor:pointer'
+      },
+        feedbackReq,
+        el('span', { style: 'font-weight:600;color:var(--text)' }, 'Feedback / investigation required'),
+        el('span', { class: 'muted', style: 'font-size:11.5px' }, '(deeper RCA to be triggered in the existing CMA system)'))
+    );
+    const refreshClosure = () => {
+      closureBlock.style.display = (status.value === 'closed') ? '' : 'none';
+      if (status.value === 'closed') {
+        progress.value = 100;
+        progressOut.textContent = '100%';
+      }
+    };
+    status.addEventListener('change', refreshClosure);
 
     const form = el('div', {},
       twoCol('Reference', ref, 'Department', department),
       twoCol('Type', type, 'Vessel', vessel),
       vesselInfo,
-      twoCol('Severity', severity, 'Classification', classification),
+      field('Severity', severity),
       field('Status', status),
       field('Start date', startedAt),
       field('One-line summary (appears in the DO SITREP)', sitrepLine),
@@ -1316,18 +1390,13 @@
       // ===== Mitigation & follow-up =====
       el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Mitigation & follow-up'),
       field('Mitigation plan', mitigation),
-      twoCol('Responsible (owner of mitigation)', responsible, 'Target resolution date', targetRes),
+      field('Target resolution date', targetRes),
       el('div', { style: 'display:flex;align-items:center;gap:10px;margin:6px 0' },
         el('label', { style: 'margin:0;min-width:80px' }, 'Progress'),
         progress, progressOut),
 
-      // ===== Closure (root cause / lessons learned) =====
-      el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' },
-        'Closure',
-        el('span', { class: 'muted', style: 'font-weight:normal;font-size:11px;margin-left:8px' },
-          '(filled when status = closed)')),
-      field('Root cause / investigation', rootCause),
-      field('Lessons learned', lessonsLearned),
+      // ===== Closure (only visible when status = closed) =====
+      closureBlock,
 
       el('div', { class: 'flex', style: 'margin-top:14px' },
         el('button', { class: 'btn-primary', onclick: submit }, idEdit ? 'Update' : 'Create'),
@@ -1360,6 +1429,7 @@
         ))
       ) : null
     );
+    refreshClosure();
     openModal(idEdit ? 'Edit case' : 'New case', form, { onSubmit: submit });
   }
   function deleteIncident(idDel) {
@@ -2945,22 +3015,39 @@
 
       if (isCollapsed) return el('div', {}, header);
 
-      const rows = list.map(i => {
-        const cls = window.CLASSIFICATIONS.find(c => c.code === (i.classification || 'INTERNAL')) || window.CLASSIFICATIONS[2];
+      // Sort within the fleet group according to filter.rowSort
+      const rowSort = filter.rowSort || 'severity';
+      const sevOrd = { crit: 0, high: 1, med: 2, low: 3 };
+      const statOrd = { open: 0, monitoring: 1, closed: 2 };
+      const sortedList = list.slice().sort((a, b) => {
+        if (rowSort === 'severity') return (sevOrd[a.severity] ?? 9) - (sevOrd[b.severity] ?? 9);
+        if (rowSort === 'status')   return (statOrd[a.status] ?? 9) - (statOrd[b.status] ?? 9);
+        if (rowSort === 'vessel')   return (a.vessel || '').localeCompare(b.vessel || '');
+        return 0;
+      });
+      const rows = sortedList.map(i => {
         const cb = el('input', { type: 'checkbox' });
         cb.checked = i.includeInSitrep !== false;
-        cb.addEventListener('change', () => { i.includeInSitrep = cb.checked; save(); setTab('dosit-' + dept.toLowerCase()); });
+        cb.addEventListener('click', e => e.stopPropagation());
+        cb.addEventListener('change', e => {
+          e.stopPropagation();
+          i.includeInSitrep = cb.checked; save(); setTab('dosit-' + dept.toLowerCase());
+        });
         const v = (i.vessel || 'n/a').toUpperCase();
         const raw = (i.sitrepLine || i.type || '').trim();
         const line = raw.toUpperCase().startsWith(v) ? raw : (raw ? v + ' — ' + raw : v);
-        return el('div', { class: 'sitrep-pick-row' },
-          el('label', { style: 'display:flex;align-items:center;gap:4px;cursor:pointer', title: 'Include in CMA SITREP' }, cb),
+        const mitig = (i.mitigationPlan || '').trim();
+        return el('div', { class: 'sitrep-pick-row', style: 'cursor:pointer', onclick: () => incidentForm(i.id) },
+          el('label', { style: 'display:flex;align-items:center;gap:4px;cursor:pointer', onclick: e => e.stopPropagation(), title: 'Include in CMA SITREP' }, cb),
+          badge(i.status, i.status === 'closed' ? 'green' : i.status === 'monitoring' ? 'orange' : 'red'),
           badge((i.severity || 'med').toUpperCase(), severityColor(i.severity)),
-          badge(cls.short, cls.color),
-          el('span', { class: 'ref', style: 'cursor:pointer;text-decoration:underline', onclick: () => incidentForm(i.id) }, i.ref || ''),
+          badge(fleet, 'blue'),
           el('span', { class: 'line' },
             line,
-            ' ', badge(i.status, i.status === 'closed' ? 'green' : i.status === 'monitoring' ? 'orange' : 'red')));
+            mitig
+              ? el('div', { class: 'muted', style: 'font-size:11.5px;margin-top:2px' },
+                  '↳ Mitigation: ' + (mitig.length > 160 ? mitig.slice(0, 160) + '…' : mitig))
+              : null));
       });
       return el('div', {}, header,
         el('div', { class: 'sitrep-pick-block', style: 'margin-top:0' }, ...rows));
@@ -2984,6 +3071,23 @@
       setTab('dosit-' + dept.toLowerCase());
     } }, allCollapsed ? '▾ Expand all' : '▸ Collapse all');
 
+    // Bulk select/deselect of "include in SITREP" — applies only to the currently filtered cases
+    const selectAll = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+      allDeptCases.forEach(i => { i.includeInSitrep = true; });
+      save(); setTab('dosit-' + dept.toLowerCase());
+    } }, '☑ Select all');
+    const deselectAll = el('button', { class: 'btn-ghost btn-sm', onclick: () => {
+      allDeptCases.forEach(i => { i.includeInSitrep = false; });
+      save(); setTab('dosit-' + dept.toLowerCase());
+    } }, '☐ Deselect all');
+
+    // Sort: by fleet (default) / criticality / status — applies to row order inside groups and to group order
+    const sortSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
+      el('option', { value: 'fleet',    selected: (filter.rowSort || 'severity') === 'fleet' }, 'Sort: Fleet'),
+      el('option', { value: 'severity', selected: (filter.rowSort || 'severity') === 'severity' }, 'Sort: Criticality'),
+      el('option', { value: 'status',   selected: filter.rowSort === 'status' }, 'Sort: Status'));
+    sortSel.addEventListener('change', () => { filter.rowSort = sortSel.value; setTab('dosit-' + dept.toLowerCase()); });
+
     root.appendChild(panel('My SITREP — ' + dept + ' · ' + deptLabel,
       el('div', {},
         el('div', { class: 'flex-between', style: 'margin-bottom:8px' },
@@ -3005,7 +3109,7 @@
         el('div', { class: 'flex-between', style: 'margin:8px 0 4px' },
           el('span', { class: 'muted', style: 'font-size:11.5px;font-weight:600;color:var(--accent-2)' },
             'Cases by fleet · ' + allDeptCases.length + ' total'),
-          toggleAll),
+          el('div', { class: 'flex', style: 'gap:6px;flex-wrap:wrap' }, sortSel, selectAll, deselectAll, toggleAll)),
         fleetKeys.length === 0
           ? el('div', { class: 'empty' }, 'No case matches the filters for ' + dept + '.')
           : el('div', {}, ...fleetBlocks),
