@@ -1129,3 +1129,179 @@ input[type="checkbox"], input[type="radio"] {
   display: flex; gap: 6px; flex-wrap: wrap;
   margin-bottom: 10px;
 }
+
+/* ============================================================ */
+/*   RESPONSIVE — tablet & smartphone                            */
+/* ============================================================ */
+
+/* Tablet — landscape phones and portrait tablets */
+@media (max-width: 900px) {
+  body { font-size: 13px; }
+  main { padding: 14px 12px; gap: 12px; }
+  .topbar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+  .brand-sub { display: none; }
+  .brand-title { font-size: 14.5px; }
+  .brand-logo { width: 34px; height: 34px; font-size: 13px; }
+  .tabs { padding: 0 6px; top: 56px; }
+  .tab { padding: 10px 11px; font-size: 12px; }
+  .panel-header { padding: 8px 12px; }
+  .panel-body { padding: 10px 12px; }
+  .modal-card { width: 96vw; max-height: 92vh; border-radius: 8px; }
+  .modal-header { padding: 12px 14px; }
+  .modal-body { padding: 12px 14px; }
+  .grid-4 { grid-template-columns: 1fr 1fr; }
+}
+
+/* Smartphone — portrait phones (≤640px) */
+@media (max-width: 640px) {
+  body { font-size: 12.5px; }
+
+  /* Top bar: 2 lines, brand + critical controls only */
+  .topbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .brand { gap: 8px; min-width: 0; flex: 1; }
+  .brand-text { min-width: 0; overflow: hidden; }
+  .brand-title {
+    font-size: 13.5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .status-strip { gap: 6px; }
+  .utc-clock, .local-clock { padding: 4px 7px; font-size: 11px; }
+  .utc-clock .lbl, .local-clock .lbl { display: none; }
+  .alert-level { padding: 3px 6px; gap: 5px; }
+  .alert-level select { font-size: 11.5px; max-width: 92px; }
+  .user-chip { display: none !important; }
+  .icon-btn { width: 32px; height: 32px; font-size: 13px; }
+  #langToggleBtn { min-width: 36px !important; padding: 0 6px; }
+
+  /* Tabs: stay horizontally scrollable, denser */
+  .tabs { padding: 0 4px; top: auto; position: relative; }
+  .tab { padding: 9px 10px; font-size: 11.5px; }
+
+  main { padding: 10px 8px; gap: 10px; }
+
+  /* Panels: tighter chrome */
+  .panel { border-radius: 8px; }
+  .panel-header {
+    padding: 8px 12px;
+    flex-wrap: wrap; gap: 6px;
+  }
+  .panel-header h2 { font-size: 11px; letter-spacing: 1.1px; }
+  .panel-body { padding: 10px 12px; }
+
+  /* Grids: stack everything */
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr !important; gap: 8px; }
+  .form-row.cols-2,
+  .form-row.cols-3,
+  .form-row.cols-4 { grid-template-columns: 1fr !important; }
+
+  /* KPI tiles: tighter */
+  .kpi { padding: 10px 12px; }
+  .kpi-value { font-size: 20px; }
+  .kpi-label { font-size: 9px; letter-spacing: 1.1px; }
+
+  /* Buttons: larger tap target (≥36px height), wrap as needed */
+  .btn-primary, .btn-ghost, .btn-danger, .btn-warn, .btn-success {
+    padding: 8px 12px; min-height: 36px;
+  }
+  .btn-sm { padding: 6px 10px; min-height: 30px; font-size: 11.5px; }
+  /* Flex toolbars wrap so nothing overflows */
+  .flex, .flex-between { flex-wrap: wrap; }
+
+  /* Modal: edge-to-edge, scrollable */
+  .modal { padding: 0; align-items: end; }
+  .modal-card {
+    width: 100vw; max-width: 100vw;
+    max-height: 96vh; height: auto;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 0;
+  }
+  .modal-header {
+    padding: 12px 14px;
+    position: sticky; top: 0; z-index: 5;
+    background-color: var(--panel);
+  }
+  .modal-body { padding: 12px 14px; }
+
+  /* Tables: panel-body scrolls horizontally to keep wide tables usable */
+  .panel-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { font-size: 11.5px; min-width: 0; }
+  th, td { padding: 6px 7px; white-space: nowrap; }
+  th { letter-spacing: .8px; font-size: 9.5px; }
+  /* Allow long text columns to wrap when they need to */
+  td.wrap, td.line { white-space: normal; }
+
+  /* SITREP pick rows: stack instead of grid */
+  .sitrep-pick-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, .05);
+  }
+  .sitrep-pick-row .line { flex-basis: 100%; }
+  .sitrep-pick-row .ref { font-size: 10.5px; }
+
+  /* MEL entries: stack instead of grid */
+  .mel-entry {
+    grid-template-columns: 1fr;
+    gap: 4px; padding: 8px 10px;
+  }
+  .mel-time, .mel-cat, .mel-author { font-size: 11px; }
+
+  /* Forms: 16px font on iOS prevents auto-zoom on focus */
+  input, select, textarea { font-size: 16px; padding: 9px 10px; }
+  label { font-size: 10.5px; }
+
+  /* Menus & popovers: full-width, anchored */
+  .menu-pop { min-width: 220px; max-width: calc(100vw - 24px); right: 8px !important; }
+  .tab-more-pop { min-width: 220px; max-width: calc(100vw - 24px); }
+
+  /* FAB: more thumb-reachable */
+  .fab { bottom: 18px; right: 16px; }
+  .fab-main {
+    width: 52px; height: 52px;
+    font-size: 26px;
+    box-shadow: 0 8px 20px rgba(79, 158, 255, .5);
+  }
+  .fab-menu { bottom: 64px; min-width: 200px; }
+  .fab-menu button { padding: 12px 14px; font-size: 13px; }
+
+  /* Footer: stack and shrink */
+  .footer {
+    flex-direction: column; gap: 4px; align-items: flex-start;
+    padding: 8px 12px; font-size: 10.5px;
+  }
+
+  /* SITREP preview: smaller font, full-width */
+  .sitrep-preview { font-size: 10.5px; padding: 12px; max-height: 420px; }
+
+  /* Risk matrix: smaller cells */
+  .risk-matrix { grid-template-columns: 56px repeat(5, 1fr); grid-auto-rows: 44px; }
+  .risk-cell { font-size: 10px; }
+
+  /* Auth card: edge-friendly */
+  .auth-card { padding: 22px 18px 16px; border-radius: 12px; }
+  .auth-title { font-size: 19px; }
+  .auth-sub { font-size: 10px; letter-spacing: 1.6px; }
+  .auth-logo { width: 50px; height: 50px; font-size: 19px; }
+
+  /* Hide non-essential keyboard shortcut hints on mobile */
+  .kbd { display: none; }
+}
+
+/* Very small phones (≤380px) — last-resort tightening */
+@media (max-width: 380px) {
+  .brand-title { font-size: 12.5px; }
+  .alert-level select { max-width: 76px; font-size: 11px; }
+  .tab { padding: 8px 8px; font-size: 11px; }
+  main { padding: 8px 6px; }
+  .panel-body { padding: 8px 10px; }
+}
+
+/* Touch-screen interaction: remove hover lift that feels sticky on touch */
+@media (hover: none) {
+  .kpi:hover, .panel:hover, .btn-primary:hover, .fab-main:hover,
+  .icon-btn:hover { transform: none; }
+  .btn-ghost:hover { background: transparent; }
+}
