@@ -305,6 +305,63 @@ Today's cases
 {FU_DEADLINES}
 `;
 
+// French version of the CMA Ships SITREP template
+window.SITREP_CMA_TEMPLATE_FR = `╔══════════════════════════════════════════════════════════════╗
+║                    CMA SHIPS — SITREP                        ║
+╚══════════════════════════════════════════════════════════════╝
+{DAY}   ·   Semaine {WEEK}
+Duty Manager Marseille : {DM_NAME}
+Mode : {MODE}
+
+──── STATUT GLOBAL : {STATUT} ────
+
+▸ SYNTHÈSE 24 h
+{SYNTHESIS}
+
+▸ KPIs
+  • Alertes 24 h                            : {ALERTS_24H}
+  • Off-hire estimé (ouvert, h)             : {OFFHIRE_HOURS}
+       — FM : {OFFHIRE_FM} h · CR : {OFFHIRE_CR} h · FU : {OFFHIRE_FU} h
+  • Risque off-hire nouveau cette semaine (h): {OFFHIRE_WEEK}
+  • Off-hire YTD constaté                    : {OFFHIRE_YTD} h
+  • Cible YTD (99,5 % × {N_VESSELS} navires)              : {OFFHIRE_TARGET} h
+  • Réalisé vs cible YTD                     : {OFFHIRE_RATIO} %
+
+◆ POINTS POUR TOP MANAGEMENT
+  À l'attention directe du VP avant Group MM
+{TOP_MGMT_POINTS}
+
+────────────────────────────────────────────────────────────────
+  FLEET MANAGEMENT                            Statut [{FM_STATUS}]
+  Duty Officer (Singapour HO) — {DO_FM}
+────────────────────────────────────────────────────────────────
+Dossiers du jour
+{FM_DOSSIERS}
+
+Échéances 24-72 h
+{FM_DEADLINES}
+
+────────────────────────────────────────────────────────────────
+  CREWING                                     Statut [{CR_STATUS}]
+  Duty Officer (Singapour HO) — {DO_CR}
+────────────────────────────────────────────────────────────────
+Dossiers du jour
+{CR_DOSSIERS}
+
+Échéances 24-72 h
+{CR_DEADLINES}
+
+────────────────────────────────────────────────────────────────
+  FLEET UPGRADE                               Statut [{FU_STATUS}]
+  Duty Officer (Chine — sur site) — {DO_FU}
+────────────────────────────────────────────────────────────────
+Dossiers du jour
+{FU_DOSSIERS}
+
+Échéances 24-72 h
+{FU_DEADLINES}
+`;
+
 // Kept for backward compatibility with triggers: alias to MODES.
 window.POSTURES = window.MODES;
 

@@ -3213,15 +3213,22 @@
 
     const preview = el('pre', { class: 'sitrep-preview' }, '— Click "Generate" to produce the CMA Ships SITREP —');
 
+    const langSel = el('select', { style: 'width:auto;padding:3px 6px;font-size:12px' },
+      el('option', { value: 'en', selected: (state.sitrepLang || 'en') === 'en' }, 'EN'),
+      el('option', { value: 'fr', selected: state.sitrepLang === 'fr' }, 'FR'));
+    langSel.addEventListener('change', () => { state.sitrepLang = langSel.value; save(); });
+
     const buildBtn = el('button', { class: 'btn-primary', onclick: () => {
       state.sitrepCounter = (state.sitrepCounter || 0) + 1;
       state.weekNumber = week.value;
       state.dutyManager = dm.value;
       state.alert = mode.value; applyAlertClass(); $('#alertSelect').value = state.alert;
-      const text = renderCMASitrep(synthesis.value);
+      const lang = langSel.value || 'en';
+      state.sitrepLang = lang;
+      const text = renderCMASitrep(synthesis.value, lang);
       preview.textContent = text;
-      state.sitreps.unshift({ id: id(), ts: nowISO(), num: state.sitrepCounter, text });
-      logMEL('INFO', `CMA Ships SITREP N°${state.sitrepCounter} generated (mode ${state.alert})`);
+      state.sitreps.unshift({ id: id(), ts: nowISO(), num: state.sitrepCounter, text, lang });
+      logMEL('INFO', `CMA Ships SITREP N°${state.sitrepCounter} generated (mode ${state.alert}, lang ${lang})`);
       save();
     } }, '📄 Generate SITREP');
     const printBtn = el('button', { class: 'btn-ghost', onclick: () => window.print() }, '🖨 Print');
@@ -3234,7 +3241,11 @@
         twoCol('Week', week, 'Mode', mode),
         field('Duty Manager Marseille', dm),
         field('24h synthesis (30-40 words)', synthesis),
-        el('div', { class: 'flex', style: 'margin-top:10px' }, buildBtn, printBtn, dlBtn)
+        el('div', { class: 'flex', style: 'margin-top:10px;gap:8px;align-items:center' },
+          buildBtn,
+          el('span', { class: 'muted', style: 'font-size:11.5px' }, 'Language:'),
+          langSel,
+          printBtn, dlBtn)
       )
     ));
 
@@ -3431,14 +3442,22 @@
     return 'S' + String(Math.ceil((((date - yearStart) / 86400000) + 1) / 7)).padStart(2, '0');
   }
 
-  function renderCMASitrep(synthesis) {
-    const fmt = (arr) => arr.length === 0 ? '  ▸ None.' : arr.map(s => '  ▸ ' + s).join('\n');
+  function renderCMASitrep(synthesis, lang) {
+    lang = (lang === 'fr') ? 'fr' : 'en';
+    const noneStr = lang === 'fr' ? 'Néant.' : 'None.';
+    const fmt = (arr) => arr.length === 0 ? '  ▸ ' + noneStr : arr.map(s => '  ▸ ' + s).join('\n');
     const offhireM = computeOffhireMetrics();
     const today = new Date();
-    const dayStr = today.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const statutLbl = { nominal: 'VERT', vigilance: 'AMBRE', crise: 'ROUGE' }[state.alert] || 'VERT';
-    const modeLbl = { nominal: 'Nameinal', vigilance: 'Vigilance', crise: 'Crise' }[state.alert] || 'Nameinal';
-    const deptLetter = { green: 'V', amber: 'A', red: 'R' };
+    const dayStr = today.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const statutLbl = lang === 'fr'
+      ? ({ nominal: 'VERT', vigilance: 'AMBRE', crise: 'ROUGE' }[state.alert] || 'VERT')
+      : ({ nominal: 'GREEN', vigilance: 'AMBER', crise: 'RED' }[state.alert] || 'GREEN');
+    const modeLbl = lang === 'fr'
+      ? ({ nominal: 'Nominal', vigilance: 'Vigilance', crise: 'Crise' }[state.alert] || 'Nominal')
+      : ({ nominal: 'Nominal', vigilance: 'Watch',     crise: 'Crisis' }[state.alert] || 'Nominal');
+    const deptLetter = lang === 'fr'
+      ? { green: 'V', amber: 'A', red: 'R' }
+      : { green: 'G', amber: 'A', red: 'R' };
 
     // Today's cases = synthèse une ligne de chaque dossier ouvert du dépt.
     // Préfixée du nom du navire + sévérité + classification. Triée par sévérité.
@@ -3456,7 +3475,7 @@
         const v = (i.vessel || 'n/a').toUpperCase();
         const raw = (i.sitrepLine || `${i.type}${i.summary ? ' : ' + i.summary.replace(/\n/g, ' ').slice(0, 120) : ''}`).trim();
         const line = raw.toUpperCase().startsWith(v) ? raw : `${v} — ${raw}`;
-        return `[${sevLabel[i.severity] || '—'} · ${clsShort(i.classification)}] ${line}`;
+        return `[${sevLabel[i.severity] || '—'}] ${line}`;
       });
 
     // Due dates 24-72h = actions du dept dont due dans 24-72h
@@ -3487,7 +3506,7 @@
       const d = (state.deptSitreps && state.deptSitreps[dept]) || {};
       const v = (d[kind] || '').trim();
       if (!v) return fmt(fallback);
-      return v.split('\n').map(s => s.trim() ? '  ▸ ' + s : '').filter(Boolean).join('\n') || '  ▸ None.';
+      return v.split('\n').map(s => s.trim() ? '  ▸ ' + s : '').filter(Boolean).join('\n') || ('  ▸ ' + noneStr);
     };
     // Status par dept : priorité au statut renseigné dans deptSitreps (DO), sinon deptStatus historique.
     const deptStatusOf = (dept) => {
@@ -3496,7 +3515,10 @@
       return deptLetter[s] || 'V';
     };
 
-    return window.SITREP_CMA_TEMPLATE
+    const tpl = lang === 'fr'
+      ? (window.SITREP_CMA_TEMPLATE_FR || window.SITREP_CMA_TEMPLATE)
+      : window.SITREP_CMA_TEMPLATE;
+    let out = tpl
       .replace('{DAY}', dayStr)
       .replace('{WEEK}', state.weekNumber || isoWeekNumber(today))
       .replace('{DM_NAME}', state.dutyManager || '—')
@@ -3522,7 +3544,7 @@
       .replace('{OFFHIRE_RATIO}',  offhireM.ratio)
       .replace('{N_VESSELS}',      offhireM.nVessels)
       .replace('{TOP_MGMT_POINTS}', topMgmt.length === 0
-        ? '  — No point remonté au VP —'
+        ? '__EMPTY_TOPMGMT__'
         : topMgmt.map((p, idx) => `  ${idx + 1}. ${p.label}`).join('\n'))
       .replace('{FM_STATUS}', deptStatusOf('FM'))
       .replace('{CR_STATUS}', deptStatusOf('CR'))
@@ -3542,6 +3564,18 @@
       .replace(/[═]{20,}\s*\n\s*TRANSVERSE FRICTIONS\s*\n[═]{20,}[\s\S]*?(?=\n[═─]{20,}|$)/g, '')
       .replace(/[═]{20,}\s*\n\s*WEAK SIGNALS.*?\n[═]{20,}[\s\S]*?(?=\n[═─]{20,}|$)/g, '')
       .replace(/(?:Frictions à signaler|Frictions to report)\s*\n\s*▸\s*N(?:éant|one)\.?\s*\n?/g, '');
+
+    // ===== Post-process: strip empty blocks =====
+    // 1. Top management block: if marker present, drop heading + paragraph until next blank line / divider
+    if (out.indexOf('__EMPTY_TOPMGMT__') !== -1) {
+      out = out.replace(/◆\s*(?:POINTS FOR TOP MANAGEMENT|POINTS POUR TOP MANAGEMENT)[\s\S]*?__EMPTY_TOPMGMT__\s*\n?/g, '');
+    }
+    // 2. Per-dept "24-72 h deadlines" block (EN + FR), drop if body is "▸ None." / "▸ Néant."
+    out = out.replace(/(?:24-72\s*h\s*deadlines|Échéances\s*24-72\s*h)\s*\n\s*▸\s*N(?:éant|one)\.?\s*\n?/g, '');
+    // 3. Per-dept "Today's cases" / "Dossiers du jour" — keep header even if empty (so the dept block remains intelligible)
+    // 4. Collapse any 3+ consecutive blank lines created by previous stripping
+    out = out.replace(/\n{3,}/g, '\n\n');
+    return out;
   }
 
   // ============================================================
