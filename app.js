@@ -1236,6 +1236,12 @@
     refreshOffhireRequired();
 
     const submit = () => {
+      // Cannot close a case while feedback / investigation is still required
+      if (status.value === 'closed' && feedbackReq.checked) {
+        toast('Cannot close: untick "Feedback / investigation required" first.', 'danger');
+        status.focus();
+        return;
+      }
       // Validation : off-hire réel obligatoire à la clôture
       if (status.value === 'closed') {
         const v = parseFloat(offhireAct.value);
@@ -1333,14 +1339,24 @@
     // ===== Closure block (built first so we can toggle it from status change) =====
     const closureBlock = el('div', {},
       el('h4', { style: 'margin:14px 0 6px;font-size:13px;color:var(--accent-2)' }, 'Closure'),
-      field('Cause identified', causeIdentified),
-      el('label', {
-        style: 'display:flex;gap:8px;align-items:center;margin:8px 0;padding:8px;background:rgba(255,180,0,0.08);border-radius:4px;cursor:pointer'
-      },
-        feedbackReq,
-        el('span', { style: 'font-weight:600;color:var(--text)' }, 'Feedback / investigation required'),
-        el('span', { class: 'muted', style: 'font-size:11.5px' }, '(deeper RCA to be triggered in the existing CMA system)'))
+      field('Cause identified', causeIdentified)
     );
+    // "Feedback required" is ALWAYS visible (not gated by status). It also gates closure.
+    const feedbackBlock = el('label', {
+      style: 'display:flex;gap:8px;align-items:center;margin:8px 0;padding:8px;background:rgba(255,180,0,0.08);border-radius:4px;cursor:pointer'
+    },
+      feedbackReq,
+      el('span', { style: 'font-weight:600;color:var(--text)' }, 'Feedback / investigation required'),
+      el('span', { class: 'muted', style: 'font-size:11.5px' },
+        '(must be unticked — feedback clear and agreed — before the case can be closed)'));
+    // If feedback is required, force status away from "closed"
+    feedbackReq.addEventListener('change', () => {
+      if (feedbackReq.checked && status.value === 'closed') {
+        status.value = 'monitoring';
+        refreshClosure();
+        toast('Case kept under monitoring — feedback is still required.', 'warn');
+      }
+    });
     const refreshClosure = () => {
       closureBlock.style.display = (status.value === 'closed') ? '' : 'none';
       if (status.value === 'closed') {
@@ -1348,7 +1364,14 @@
         progressOut.textContent = '100%';
       }
     };
-    status.addEventListener('change', refreshClosure);
+    // Block closing the case while feedback is still required
+    status.addEventListener('change', () => {
+      if (status.value === 'closed' && feedbackReq.checked) {
+        toast('Cannot close: untick "Feedback / investigation required" first.', 'danger');
+        status.value = 'monitoring';
+      }
+      refreshClosure();
+    });
 
     const form = el('div', {},
       twoCol('Reference', ref, 'Department', department),
@@ -1356,6 +1379,7 @@
       vesselInfo,
       field('Severity', severity),
       field('Status', status),
+      feedbackBlock,
       field('Start date', startedAt),
       field('One-line summary (appears in the DO SITREP)', sitrepLine),
       el('label', {
