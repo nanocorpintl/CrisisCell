@@ -25,6 +25,15 @@ de contexte).
 Utiliser `Edit` (jamais `sed -i` sur des mots courts — voir
 `docs/pitfalls.md`). Préserver l'indentation existante.
 
+### 1.5. (Optionnel) Relecture ciblée
+
+Pour un diff qui touche beaucoup de surface (ex. plusieurs renderers,
+refonte CSS, nouveau champ sur case), **avant** le commit, invoquer
+l'agent `crisiscell-reviewer` qui passe 4 checks ciblés (overrides
+CSS, filtre `includeInSitrep`, champs nullable + `tracked`, popovers
+dans `overflow`). Sauter cette étape pour un petit changement
+localisé.
+
 ### 2. Sanity check
 
 Toujours, sans exception :

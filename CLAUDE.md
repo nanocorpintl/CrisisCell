@@ -126,3 +126,4 @@ No conventional-commits prefixes. Don't commit unless the user asked.
 | `.claude/rules/app-js-conventions.md`| Auto-loaded when editing `app.js`         |
 | `.claude/rules/styles-conventions.md`| Auto-loaded when editing `styles.css`     |
 | `.claude/skills/ship-change/`        | The edit → check → commit → merge loop    |
+| `.claude/agents/crisiscell-reviewer` | Invoke before a large commit: 4 targeted checks |
